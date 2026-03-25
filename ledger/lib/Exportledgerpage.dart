@@ -1001,10 +1001,12 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
       final amount = (t['amount'] ?? 0).toDouble();
       final isCredit = t['isCredit'] == true;
 
+      // Payment IN = DEBIT (isCredit = false) → money coming in → increases balance
+      // Payment OUT = CREDIT (isCredit = true) → money going out → decreases balance
       if (isCredit) {
-        runningBalance += amount; // Credit increases balance
+        runningBalance -= amount; // Payment OUT (CREDIT) decreases balance
       } else {
-        runningBalance -= amount; // Debit decreases balance
+        runningBalance += amount; // Payment IN (DEBIT) increases balance
       }
     }
 
@@ -1024,7 +1026,9 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
   /// Get transaction type display - Payment In/Payment Out
   String _getTransactionTypeDisplay(Map<String, dynamic> transaction) {
     final isCredit = transaction['isCredit'] == true;
-    return isCredit ? 'Payment In' : 'Payment Out';
+    // Payment IN = DEBIT (isCredit = false) → "Payment In"
+    // Payment OUT = CREDIT (isCredit = true) → "Payment Out"
+    return isCredit ? 'Payment Out' : 'Payment In';
   }
 
   /// Format transaction date

@@ -452,6 +452,22 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       return Stream.empty();
     }
 
+    // For employees: Show only last 10 days
+    // For admin (client): Show all dates
+    if (_userRole == 'employee') {
+      final tenDaysAgo = DateTime.now().subtract(const Duration(days: 10));
+      final tenDaysAgoTimestamp = Timestamp.fromDate(tenDaysAgo);
+      
+      return _firestore
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('dates')
+          .where('createdAt', isGreaterThanOrEqualTo: tenDaysAgoTimestamp)
+          .orderBy('createdAt', descending: true)
+          .snapshots();
+    }
+
+    // Admin: Show all dates
     return _firestore
         .collection(_selectedShopCollection!)
         .doc('ledgers')
@@ -1081,6 +1097,217 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
     );
   }
 
+  /// Calculate balance difference using the EXACT same formula as PDF export
+  /// Formula: Balance Difference = Grand Total Credit - Grand Total Debit
+  /// Where:
+  /// - Grand Total Debit = Opening Balance + Transactions (Payment IN) + Sales Value
+  /// - Grand Total Credit = Transactions (Payment OUT) + Cash Out + Closing Balance
+  Future<double> _calculateBalanceDifference(
+    String ledgerDate,
+    Map<String, dynamic> ledger,
+  ) async {
+    if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
+      return 0.0;
+    }
+
+    try {
+      final openingBalance = (ledger['openingBalance'] ?? 0).toDouble();
+      final closingBalance = (ledger['closingBalance'] ?? 0).toDouble();
+      final saleValue = (ledger['saleValue'] ?? 0).toDouble();
+      final cashOut = (ledger['cashOut'] ?? 0).toDouble(); // ✅ ADD CASH OUT
+      final isLedgerClosed = (ledger['status'] ?? 'Open').toString().toLowerCase() == 'closed';
+
+      // Get all transactions for this ledger date
+      final transactionsSnapshot = await _firestore
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('transactions')
+          .where('ledgerDate', isEqualTo: ledgerDate)
+          .get();
+
+      // ✅ Calculate total debit and credit from transactions (EXACT MATCH TO PDF)
+      // Start with opening balance in debit
+      double totalDebit = openingBalance;
+      double totalCredit = 0.0;
+
+      for (var doc in transactionsSnapshot.docs) {
+        final data = doc.data();
+        final amount = (data['amount'] ?? 0).toDouble();
+        final isCredit = data['isCredit'] == true;
+
+        // Payment IN = DEBIT (isCredit = false) → amount in debit
+        // Payment OUT = CREDIT (isCredit = true) → amount in credit
+        if (isCredit) {
+          totalCredit += amount;
+        } else {
+          totalDebit += amount;
+        }
+      }
+
+      // ✅ Add sales value if ledger is closed (EXACT MATCH TO PDF)
+      final finalSaleValue = isLedgerClosed ? saleValue : 0.0;
+      if (finalSaleValue > 0) {
+        totalDebit += finalSaleValue;
+      }
+
+      // ✅ Add cash out if ledger is closed (EXACT MATCH TO PDF)
+      final finalCashOut = isLedgerClosed ? cashOut : 0.0;
+      if (finalCashOut > 0) {
+        totalCredit += finalCashOut;
+      }
+
+      // ✅ Add closing balance to credit (0 if not closed) (EXACT MATCH TO PDF)
+      final finalClosingBalance = isLedgerClosed ? closingBalance : 0.0;
+      
+      // ✅ Grand Total Credit = Total Credit (includes cash out) + Closing Balance
+      // This matches the PDF export formula exactly
+      final grandTotalCredit = totalCredit + finalClosingBalance;
+
+      // ✅ Calculate balance difference: Grand Total Credit - Grand Total Debit
+      // This matches the PDF export formula exactly
+      final balanceDifference = grandTotalCredit - totalDebit;
+
+      return balanceDifference;
+    } catch (e) {
+      debugPrint('Error calculating balance difference: $e');
+      return 0.0;
+    }
+  }
+
+  /// Show confirmation dialog and delete ledger + all its transactions (ADMIN only)
+  Future<void> _showDeleteLedgerDialog(
+    BuildContext context,
+    String ledgerDate,
+  ) async {
+    if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a shop first'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'Delete ledger?',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            'Ledger date: $ledgerDate\n\nThis will delete this ledger and all its transactions permanently.',
+            style: const TextStyle(
+              fontSize: 14,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(fontSize: 14),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[600],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Delete',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    // Show loading overlay
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Find the ledger document by ledgerDate (safest, in case docId differs)
+      final ledgerQuery = await _firestore
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('dates')
+          .where('ledgerDate', isEqualTo: ledgerDate)
+          .limit(1)
+          .get();
+
+      final batch = _firestore.batch();
+
+      if (ledgerQuery.docs.isNotEmpty) {
+        final ledgerDoc = ledgerQuery.docs.first;
+        batch.delete(ledgerDoc.reference);
+      }
+
+      // Delete all transactions for this ledger date
+      final transactionsSnapshot = await _firestore
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('transactions')
+          .where('ledgerDate', isEqualTo: ledgerDate)
+          .get();
+
+      for (var doc in transactionsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      await batch.commit();
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ledger $ledgerDate deleted successfully'),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting ledger: $e'),
+            backgroundColor: Colors.red[600],
+          ),
+        );
+      }
+    }
+  }
+
   /// Build ledger item - PASS SHOP COLLECTION TO DETAILS
   /// Build ledger item - FIXED: Pass shop collection correctly
   Widget _buildLedgerItem(
@@ -1090,7 +1317,6 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
   ) {
     final ledgerDate = ledger['ledgerDate'] ?? 'Unknown Date';
     final status = ledger['status'] ?? 'Open';
-    final closingBalance = (ledger['closingBalance'] ?? 0).toDouble();
     final isClosed = status == 'Closed';
     final isToday =
         ledgerDate == DateFormat('dd-MMM-yyyy').format(DateTime.now());
@@ -1129,6 +1355,21 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                 ),
               ),
             );
+          },
+          // Long press: admin-only delete ledger (ledger + all transactions)
+          onLongPress: () {
+            // Only admin (client login) can delete ledgers
+            if (_userRole?.toLowerCase() != 'client') {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Only admin can delete ledgers'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
+            _showDeleteLedgerDialog(context, ledgerDate);
           },
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -1196,23 +1437,48 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                     ],
                   ),
                 ),
-                Row(
-                  children: [
-                    Text(
-                      '₹${closingBalance.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: isLandscape ? 15.5 : 16.5,
-                        color: statusColor,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.chevron_right,
-                      size: isLandscape ? 18 : 20,
-                      color: Colors.grey[400],
-                    ),
-                  ],
+                FutureBuilder<double>(
+                  future: _calculateBalanceDifference(ledgerDate, ledger),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return SizedBox(
+                        width: isLandscape ? 60 : 70,
+                        height: isLandscape ? 16 : 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(statusColor!),
+                        ),
+                      );
+                    }
+
+                    final balanceDifference = snapshot.data ?? 0.0;
+                    final isNegative = balanceDifference < 0;
+                    final displayColor = isNegative ? Colors.red[600] : Colors.green[600];
+                    
+                    // Format with Indian numbering system (lakhs, crores) - same as PDF export
+                    final formattedAmount = NumberFormat('#,##,##0.00').format(balanceDifference.abs());
+
+                    return Row(
+                      children: [
+                        Text(
+                          isNegative
+                              ? '-₹$formattedAmount'
+                              : '₹$formattedAmount',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: isLandscape ? 15.5 : 16.5,
+                            color: displayColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.chevron_right,
+                          size: isLandscape ? 18 : 20,
+                          color: Colors.grey[400],
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

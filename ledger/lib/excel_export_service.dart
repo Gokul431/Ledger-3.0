@@ -8,6 +8,7 @@ class ExcelExportService {
     required double openingBalance,
     required double closingBalance,
     required double saleValue,
+    required double cashOut,
     required List<Map<String, dynamic>> transactions,
     required bool isLedgerClosed,
   }) {
@@ -17,9 +18,10 @@ class ExcelExportService {
 
     int row = 0;
 
-    // ✅ If ledger is NOT closed, set closing balance and sales value to 0
+    // ✅ If ledger is NOT closed, set closing balance, sales value, and cash out to 0
     final double finalClosingBalance = isLedgerClosed ? closingBalance : 0.0;
     final double finalSaleValue = isLedgerClosed ? saleValue : 0.0;
+    final double finalCashOut = isLedgerClosed ? cashOut : 0.0;
 
     // Header (only once at the top)
     _mergeAndWriteExcel(sheet, row, 0, 4, shopName.toUpperCase());
@@ -31,7 +33,7 @@ class ExcelExportService {
       row,
       0,
       4,
-      'Ledger Report - Date: $ledgerDate | Time: ${DateFormat('HH:mm').format(DateTime.now())}',
+      'Ledger Report - Date: $ledgerDate',
     );
     _styleExcelSubHeader(sheet, row, 0);
     row += 2;
@@ -85,6 +87,20 @@ class ExcelExportService {
       totalDebit += finalSaleValue;
     }
 
+    // ✅ CONDITIONAL: Add CASH OUT ROW only if finalCashOut > 0
+    if (finalCashOut > 0) {
+      allTransactions.add({
+        'date': '',
+        'particulars': 'CASH OUT',
+        'type': '',
+        'debit': 0.0,
+        'credit': finalCashOut,
+      });
+
+      // ✅ Add CASH OUT to totals
+      totalCredit += finalCashOut;
+    }
+
     // ✅ Add CLOSING BALANCE row (in CREDIT column) - BEFORE GRAND TOTAL
     // Show 0 if ledger not closed, else show actual closing balance
     allTransactions.add({
@@ -95,7 +111,8 @@ class ExcelExportService {
       'credit': finalClosingBalance,
     });
 
-    // ✅ ADD CLOSING BALANCE TO TOTAL CREDIT FOR GRAND TOTAL CALCULATION
+    // ✅ ADD CLOSING BALANCE AND CASH OUT TO TOTAL CREDIT FOR GRAND TOTAL CALCULATION
+    // totalCredit already includes cashOut, so just add closingBalance
     double grandTotalCredit = totalCredit + finalClosingBalance;
 
     // ✅ Add GRAND TOTAL row (AFTER CLOSING BALANCE)
@@ -145,6 +162,7 @@ class ExcelExportService {
       final creditAmount = trans['credit'] as double;
       final isGrandTotal = trans['particulars'] == 'GRAND TOTAL';
       final isSalesValue = trans['particulars'] == 'SALES VALUE';
+      final isCashOut = trans['particulars'] == 'CASH OUT';
       final isOpeningBalance = trans['particulars'] == 'Opening Balance';
       final isBalanceDifference = trans['particulars'] == 'BALANCE DIFFERENCE';
       final isClosingBalance = trans['particulars'] == 'CLOSING BALANCE';
@@ -154,7 +172,7 @@ class ExcelExportService {
       _writeExcelCell(sheet, row, 2, trans['type'] ?? '');
 
       // ✅ CREDIT COLUMN
-      if (isClosingBalance) {
+      if (isClosingBalance || isCashOut) {
         _writeExcelCell(
           sheet,
           row,
@@ -199,6 +217,7 @@ class ExcelExportService {
       final isBoldRow =
           isGrandTotal ||
           isSalesValue ||
+          isCashOut ||
           isOpeningBalance ||
           isBalanceDifference ||
           isClosingBalance;
@@ -333,7 +352,9 @@ class ExcelExportService {
   /// Get transaction type display - Payment In/Payment Out
   static String _getTransactionTypeDisplay(Map<String, dynamic> transaction) {
     final isCredit = transaction['isCredit'] == true;
-    return isCredit ? 'Payment In' : 'Payment Out';
+    // Payment IN = DEBIT (isCredit = false) → "Payment In"
+    // Payment OUT = CREDIT (isCredit = true) → "Payment Out"
+    return isCredit ? 'Payment Out' : 'Payment In';
   }
 
   // ═══════════════════════════════════════════════════════════════════════

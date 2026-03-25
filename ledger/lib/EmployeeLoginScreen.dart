@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 import 'ledgerlist.dart';
 
 class EmployeeLoginScreen extends StatefulWidget {
@@ -74,6 +77,171 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
   /// Hash password using SHA256
   String _hashPassword(String password) {
     return sha256.convert(utf8.encode(password)).toString();
+  }
+
+  /// Get device IMEI/ID
+  Future<String?> _getDeviceImei() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        // Use Android ID as device identifier
+        return androidInfo.id;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        // Use Identifier for Vendor as device identifier
+        return iosInfo.identifierForVendor;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error getting device IMEI: $e');
+      return null;
+    }
+  }
+
+  /// Get comprehensive device information
+  Future<Map<String, dynamic>?> _getDeviceInfo() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      String? deviceId;
+      String deviceModel = 'Unknown';
+      String deviceBrand = 'Unknown';
+      String deviceName = 'Unknown';
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        deviceId = androidInfo.id;
+        deviceModel = androidInfo.model;
+        deviceBrand = androidInfo.brand;
+        deviceName = '${androidInfo.brand} ${androidInfo.model}';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        deviceId = iosInfo.identifierForVendor;
+        deviceModel = iosInfo.model;
+        deviceName = iosInfo.name;
+        deviceBrand = 'Apple';
+      }
+
+      if (deviceId == null || deviceId.isEmpty) {
+        return null;
+      }
+
+      return {
+        'deviceId': deviceId,
+        'deviceModel': deviceModel,
+        'deviceBrand': deviceBrand,
+        'deviceName': deviceName,
+        'platform': Platform.isAndroid ? 'Android' : 'iOS',
+      };
+    } catch (e) {
+      debugPrint('Error getting device info: $e');
+      return null;
+    }
+  }
+
+  /// Track device history when employee logs in
+  Future<void> _trackDeviceHistory(String collectionName) async {
+    try {
+      final deviceInfo = await _getDeviceInfo();
+      if (deviceInfo == null) return;
+
+      final deviceId = deviceInfo['deviceId'] as String;
+      final loginTimestamp = FieldValue.serverTimestamp();
+
+      // Get current device history
+      final credDoc = await FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc('Credentials')
+          .get();
+
+      if (!credDoc.exists) return;
+
+      final credData = credDoc.data() ?? {};
+      final deviceHistory = credData['deviceHistory'] as List<dynamic>? ?? [];
+
+      // Check if device already exists in history
+      final deviceIndex = deviceHistory.indexWhere(
+        (d) => (d as Map<String, dynamic>)['deviceId'] == deviceId,
+      );
+
+      if (deviceIndex >= 0) {
+        // Update existing device
+        final existingDevice = deviceHistory[deviceIndex] as Map<String, dynamic>;
+        final loginHistory = existingDevice['loginHistory'] as List<dynamic>? ?? [];
+        
+        // Add new login to history
+        loginHistory.add(loginTimestamp);
+
+        deviceHistory[deviceIndex] = {
+          ...existingDevice,
+          'lastLoginAt': loginTimestamp,
+          'loginHistory': loginHistory,
+        };
+      } else {
+        // Add new device
+        deviceHistory.add({
+          ...deviceInfo,
+          'firstLoginAt': loginTimestamp,
+          'lastLoginAt': loginTimestamp,
+          'loginHistory': [loginTimestamp],
+        });
+      }
+
+      // Update Firestore
+      await FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc('Credentials')
+          .update({
+            'deviceHistory': deviceHistory,
+          });
+
+      debugPrint('✅ Device history tracked');
+    } catch (e) {
+      debugPrint('Error tracking device history: $e');
+      // Don't block login if history tracking fails
+    }
+  }
+
+  /// Verify device IMEI matches stored IMEI
+  Future<bool> _verifyDeviceImei(String collectionName) async {
+    try {
+      // Get stored IMEI from Firestore
+      final credDoc = await FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc('Credentials')
+          .get();
+
+      if (!credDoc.exists) {
+        debugPrint('Credentials document not found for IMEI check');
+        return false;
+      }
+
+      final credData = credDoc.data() ?? {};
+      final storedImei = credData['deviceImei'] as String?;
+
+      // If no IMEI is stored, allow login (backward compatibility)
+      if (storedImei == null || storedImei.isEmpty) {
+        debugPrint('⚠️ No IMEI stored, allowing login (backward compatibility)');
+        return true;
+      }
+
+      // Get current device IMEI
+      final currentImei = await _getDeviceImei();
+
+      if (currentImei == null || currentImei.isEmpty) {
+        debugPrint('⚠️ Could not get device IMEI');
+        return false;
+      }
+
+      // Compare IMEIs
+      final isMatch = storedImei.trim() == currentImei.trim();
+      debugPrint('IMEI Check - Stored: $storedImei, Current: $currentImei, Match: $isMatch');
+      
+      return isMatch;
+    } catch (e) {
+      debugPrint('Error verifying device IMEI: $e');
+      return false;
+    }
   }
 
   /// Fetch all shops from shop_list collection
@@ -162,7 +330,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
     setState(() => _isLoading = true);
 
     try {
-      // Verify credentials
+      // Verify credentials from Firestore
       final isValid = await _verifyEmployeeCredentials(
         _selectedShopCollection!,
         username,
@@ -175,6 +343,45 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
         }
         setState(() => _isLoading = false);
         return;
+      }
+
+      // Verify device IMEI
+      final imeiValid = await _verifyDeviceImei(_selectedShopCollection!);
+      if (!imeiValid) {
+        if (mounted) {
+          _showSnackBar(
+            'Access denied: This device is not authorized. Please contact admin.',
+            isError: true,
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Track device history (non-blocking)
+      _trackDeviceHistory(_selectedShopCollection!);
+
+      // Get employee email from Firestore for Firebase Auth
+      final credDoc = await FirebaseFirestore.instance
+          .collection(_selectedShopCollection!)
+          .doc('Credentials')
+          .get();
+
+      final credData = credDoc.data() ?? {};
+      final email = credData['email'] as String?;
+
+      // Sign in to Firebase Auth if email exists
+      if (email != null && email.isNotEmpty) {
+        try {
+          await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          debugPrint('✅ Signed in to Firebase Auth as employee');
+        } catch (authError) {
+          debugPrint('⚠️ Could not sign in to Firebase Auth: $authError');
+          // Continue anyway - Firestore credentials are valid
+        }
       }
 
       // Save login info to SharedPreferences
@@ -196,14 +403,15 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                 const LedgerListScreen(),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
+              return FadeTransition(opacity: animation, child: child);
+            },
             transitionDuration: const Duration(milliseconds: 400),
           ),
         );
       }
-    } catch (e) {
-      debugPrint('Error: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ Login error: $e');
+      debugPrint('❌ Stack trace: $stackTrace');
       if (mounted) {
         _showSnackBar('Error: $e', isError: true);
         setState(() => _isLoading = false);

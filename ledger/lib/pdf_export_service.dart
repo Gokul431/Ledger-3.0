@@ -2,35 +2,167 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'font_loader.dart';
 
 class PDFExportService {
-  static late pw.Font tamilFont;
-  static late pw.Font tamilBoldFont;
-
-  /// Initialize Tamil fonts - call this once during app startup
-  static Future<void> initializeTamilFonts(
-    Uint8List tamilFontData,
-    Uint8List tamilBoldFontData,
-  ) async {
-    tamilFont = pw.Font.ttf(ByteData.view(tamilFontData.buffer));
-    tamilBoldFont = pw.Font.ttf(ByteData.view(tamilBoldFontData.buffer));
+  /// Get Tamil font - uses TamilFontLoader if available, otherwise null
+  /// Ensures Tamil fonts are properly loaded before use
+  static pw.Font? _getTamilFont({bool bold = false}) {
+    try {
+      // Verify fonts are initialized
+      if (TamilFontLoader.tamilRegular == null) {
+        debugPrint('Error: Tamil regular font is null');
+        return null;
+      }
+      
+      if (bold) {
+        if (TamilFontLoader.tamilBold != null) {
+          return TamilFontLoader.tamilBold;
+        }
+        // Fallback to regular if bold not available
+        debugPrint('Warning: Tamil bold font not available, using regular');
+        return TamilFontLoader.tamilRegular;
+      } else {
+        return TamilFontLoader.tamilRegular;
+      }
+    } catch (e) {
+      debugPrint('Error getting Tamil font: $e');
+      return null;
+    }
   }
 
-  static pw.Document generateLedgerPDF({
+  /// Generate PDF - PRIMARY: Uses cloud function, FALLBACK: Local generation
+  /// Cloud function (index.js) is the primary method for PDF generation
+  /// Local generation (this method) is used as backup if cloud function fails
+  static Future<Uint8List> generateLedgerPDF({
     required DateTime date,
     required String shopName,
     required double openingBalance,
     required double closingBalance,
     required double saleValue,
+    required double cashOut,
     required List<Map<String, dynamic>> transactions,
     required bool isLedgerClosed,
-  }) {
+  }) async {
+    // ✅ PRIMARY: Try cloud function first
+    try {
+      debugPrint('🔄 Attempting to generate PDF via cloud function...');
+      final pdfBytes = await _generatePDFViaCloudFunction(
+        date: date,
+        shopName: shopName,
+        openingBalance: openingBalance,
+        closingBalance: closingBalance,
+        saleValue: saleValue,
+        cashOut: cashOut,
+        transactions: transactions,
+        isLedgerClosed: isLedgerClosed,
+      );
+      debugPrint('✅ PDF generated successfully via cloud function');
+      return pdfBytes;
+    } catch (e) {
+      debugPrint('⚠️ Cloud function failed, falling back to local generation: $e');
+      // ✅ FALLBACK: Use local generation if cloud function fails
+      return _generatePDFLocally(
+        date: date,
+        shopName: shopName,
+        openingBalance: openingBalance,
+        closingBalance: closingBalance,
+        saleValue: saleValue,
+        cashOut: cashOut,
+        transactions: transactions,
+        isLedgerClosed: isLedgerClosed,
+      );
+    }
+  }
+
+  /// ✅ PRIMARY METHOD: Generate PDF via cloud function
+  static Future<Uint8List> _generatePDFViaCloudFunction({
+    required DateTime date,
+    required String shopName,
+    required double openingBalance,
+    required double closingBalance,
+    required double saleValue,
+    required double cashOut,
+    required List<Map<String, dynamic>> transactions,
+    required bool isLedgerClosed,
+  }) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+      final callable = functions.httpsCallable('generateLedgerPDF');
+
+      // Prepare transaction data for cloud function
+      // Convert Timestamp objects to maps for JSON serialization
+      final transactionsData = transactions.map((t) {
+        final Map<String, dynamic> tx = Map<String, dynamic>.from(t);
+        
+        // Convert Timestamp to map format for cloud function
+        if (tx['createdAt'] != null) {
+          final ts = tx['createdAt'];
+          if (ts is Timestamp) {
+            tx['createdAt'] = {
+              '_seconds': ts.seconds,
+              '_nanoseconds': ts.nanoseconds,
+            };
+          }
+        }
+        
+        return tx;
+      }).toList();
+
+      // Call cloud function
+      final result = await callable.call({
+        'date': date.toIso8601String(),
+        'shopName': shopName,
+        'openingBalance': openingBalance,
+        'closingBalance': closingBalance,
+        'saleValue': saleValue,
+        'cashOut': cashOut,
+        'transactions': transactionsData,
+        'isLedgerClosed': isLedgerClosed,
+      });
+
+      // Extract PDF base64 from response
+      final responseData = result.data as Map<String, dynamic>;
+      if (responseData['success'] == true && responseData['pdfBase64'] != null) {
+        final pdfBase64 = responseData['pdfBase64'] as String;
+        final pdfBytes = base64Decode(pdfBase64);
+        return Uint8List.fromList(pdfBytes);
+      } else {
+        throw Exception('Cloud function returned error: ${responseData['message'] ?? 'Unknown error'}');
+      }
+    } catch (e) {
+      debugPrint('❌ Cloud function error: $e');
+      rethrow; // Re-throw to trigger fallback
+    }
+  }
+
+  /// ✅ FALLBACK METHOD: Generate PDF locally (backup)
+  static Future<Uint8List> _generatePDFLocally({
+    required DateTime date,
+    required String shopName,
+    required double openingBalance,
+    required double closingBalance,
+    required double saleValue,
+    required double cashOut,
+    required List<Map<String, dynamic>> transactions,
+    required bool isLedgerClosed,
+  }) async {
+    // Verify Tamil fonts are loaded before generating PDF
+    if (TamilFontLoader.tamilRegular == null) {
+      debugPrint('⚠️ WARNING: Tamil fonts not initialized! PDF may not render Tamil correctly.');
+    }
+    
     final pdf = pw.Document();
     final ledgerDate = DateFormat('dd-MMM-yyyy').format(date);
 
-    // ✅ If ledger is NOT closed, set closing balance and sales value to 0
+    // ✅ If ledger is NOT closed, set closing balance, sales value, and cash out to 0
     final double finalClosingBalance = isLedgerClosed ? closingBalance : 0.0;
     final double finalSaleValue = isLedgerClosed ? saleValue : 0.0;
+    final double finalCashOut = isLedgerClosed ? cashOut : 0.0;
 
     // ✅ Create transaction list with opening balance as first row
     final List<Map<String, dynamic>> allTransactions = [
@@ -54,6 +186,8 @@ class PDFExportService {
           'time': time, // ✅ Add time field
           'particulars': _getParticulars(t),
           'type': _getTransactionTypeDisplay(t),
+          // Payment IN = DEBIT (isCredit = false) → amount in debit column
+          // Payment OUT = CREDIT (isCredit = true) → amount in credit column
           'debit': !isCredit ? amount : 0.0,
           'credit': isCredit ? amount : 0.0,
         };
@@ -85,6 +219,21 @@ class PDFExportService {
       totalDebit += finalSaleValue;
     }
 
+    // ✅ CONDITIONAL: Add CASH OUT ROW only if finalCashOut > 0
+    if (finalCashOut > 0) {
+      allTransactions.add({
+        'date': '',
+        'time': '', // ✅ Add empty time
+        'particulars': 'CASH OUT',
+        'type': '',
+        'debit': 0.0,
+        'credit': finalCashOut,
+      });
+
+      // ✅ Add CASH OUT to totals
+      totalCredit += finalCashOut;
+    }
+
     // ✅ Add CLOSING BALANCE row (in CREDIT column) - BEFORE GRAND TOTAL
     // Show 0 if ledger not closed, else show actual closing balance
     allTransactions.add({
@@ -96,7 +245,7 @@ class PDFExportService {
       'credit': finalClosingBalance,
     });
 
-    // ✅ ADD CLOSING BALANCE TO TOTAL CREDIT FOR GRAND TOTAL CALCULATION
+    // ✅ ADD CLOSING BALANCE AND CASH OUT TO TOTAL CREDIT FOR GRAND TOTAL CALCULATION
     double grandTotalCredit = totalCredit + finalClosingBalance;
 
     // ✅ Add GRAND TOTAL row (AFTER CLOSING BALANCE)
@@ -133,20 +282,23 @@ class PDFExportService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // Header
+              // Header with pure Tamil support
               pw.Center(
                 child: pw.Column(
                   children: [
                     pw.Text(
-                      shopName.toUpperCase(),
+                      shopName.toUpperCase(), // Pure Tamil text - no conversion
                       style: pw.TextStyle(
                         fontSize: 16,
                         fontWeight: pw.FontWeight.bold,
+                        font: _containsTamilCharacters(shopName) 
+                            ? _getTamilFont(bold: true) 
+                            : null, // Use Tamil font if contains Tamil
                       ),
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      'Ledger Report - Date: $ledgerDate | Time: ${DateFormat('HH:mm').format(DateTime.now())}',
+                      'Ledger Report - Date: $ledgerDate',
                       style: const pw.TextStyle(fontSize: 12),
                     ),
                   ],
@@ -224,6 +376,7 @@ class PDFExportService {
                     final creditAmount = tx['credit'] as double;
                     final isGrandTotal = tx['particulars'] == 'GRAND TOTAL';
                     final isSalesValue = tx['particulars'] == 'SALES VALUE';
+                    final isCashOut = tx['particulars'] == 'CASH OUT';
                     final isOpeningBalance =
                         tx['particulars'] == 'Opening Balance';
                     final isBalanceDifference =
@@ -238,6 +391,7 @@ class PDFExportService {
                       decoration:
                           (isGrandTotal ||
                               isSalesValue ||
+                              isCashOut ||
                               isOpeningBalance ||
                               isBalanceDifference ||
                               isClosingBalance)
@@ -254,6 +408,7 @@ class PDFExportService {
                               fontWeight:
                                   (isGrandTotal ||
                                       isSalesValue ||
+                                      isCashOut ||
                                       isBalanceDifference ||
                                       isClosingBalance)
                                   ? pw.FontWeight.bold
@@ -269,21 +424,23 @@ class PDFExportService {
                           bold:
                               isGrandTotal ||
                               isSalesValue ||
+                              isCashOut ||
                               isOpeningBalance ||
                               isBalanceDifference ||
                               isClosingBalance,
                         ),
-                        _buildPDFCell(
+                        _buildPDFCellWithTamil(
                           tx['type'],
                           align: pw.TextAlign.center,
                           bold:
                               isGrandTotal ||
                               isSalesValue ||
+                              isCashOut ||
                               isBalanceDifference ||
                               isClosingBalance,
                         ),
                         // ✅ CREDIT COLUMN
-                        isClosingBalance
+                        (isClosingBalance || isCashOut)
                             ? pw.Container(
                                 padding: const pw.EdgeInsets.all(6),
                                 child: pw.Text(
@@ -302,7 +459,7 @@ class PDFExportService {
                                     ? 'Rs ${NumberFormat('#,##,##0.00').format(creditAmount)}'
                                     : '',
                                 align: pw.TextAlign.center,
-                                bold: isGrandTotal || isSalesValue,
+                                bold: isGrandTotal || isSalesValue || isCashOut,
                               ),
                         // ✅ DEBIT COLUMN - Balance Difference with color coding
                         isBalanceDifference
@@ -334,6 +491,7 @@ class PDFExportService {
                                 bold:
                                     isGrandTotal ||
                                     isSalesValue ||
+                                    isCashOut ||
                                     isClosingBalance ||
                                     isOpeningBalance,
                               ),
@@ -386,7 +544,8 @@ class PDFExportService {
       ),
     );
 
-    return pdf;
+    // Convert PDF document to bytes
+    return await pdf.save();
   }
 
   // Helper functions
@@ -405,7 +564,19 @@ class PDFExportService {
     return ''; // Return empty string if time not available
   }
 
-  /// ✅ Build PDF cell with Tamil font support
+  /// ✅ Normalize Tamil text for proper rendering
+  /// Ensures Tamil conjuncts (like "கு") render correctly by preserving Unicode composition
+  /// Note: Dart doesn't have built-in Unicode normalization, so we preserve the text as-is
+  /// The font itself should handle Tamil ligatures correctly if it's a proper Tamil font
+  static String _normalizeTamilText(String text) {
+    if (text.isEmpty) return text;
+    // Return text as-is - the NotoSansTamil font should handle Tamil conjuncts correctly
+    // The issue might be with font embedding or text encoding, not normalization
+    return text;
+  }
+
+  /// ✅ Build PDF cell with pure Tamil support
+  /// Uses Tamil fonts for Tamil text, no conversion
   static pw.Widget _buildPDFCellWithTamil(
     String text, {
     bool bold = false,
@@ -413,16 +584,23 @@ class PDFExportService {
     int maxLines = 1,
   }) {
     final isTamil = _containsTamilCharacters(text);
-    final font = isTamil ? (bold ? tamilBoldFont : tamilFont) : null;
+    final tamilFont = isTamil ? _getTamilFont(bold: bold) : null;
 
+    // Warn if Tamil text detected but font not available
+    if (isTamil && tamilFont == null) {
+      debugPrint('⚠️ WARNING: Tamil text detected but Tamil font not loaded: "$text"');
+      debugPrint('   Make sure TamilFontLoader.initializeFonts() is called in main()');
+    }
+
+    // Use Tamil font for Tamil text, default font for English
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
-        text,
+        text, // Pure Tamil text - no conversion
         style: pw.TextStyle(
           fontSize: 9,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          font: font,
+          font: tamilFont, // Use Tamil font if available (null = default font)
         ),
         textAlign: align,
         maxLines: maxLines,
@@ -431,24 +609,42 @@ class PDFExportService {
   }
 
   /// ✅ Check if text contains Tamil Unicode characters
+  /// Tamil Unicode range: U+0B80 to U+0BFF (includes all Tamil letters, numbers, and symbols)
   static bool _containsTamilCharacters(String text) {
+    if (text.isEmpty) return false;
+    // Tamil Unicode block: U+0B80 to U+0BFF
+    // This includes: Tamil letters, vowels, consonants, numbers, and punctuation
     final tamilRegex = RegExp(r'[\u0B80-\u0BFF]');
     return tamilRegex.hasMatch(text);
   }
 
+  /// Build PDF cell with pure Tamil support
+  /// Uses Tamil fonts for Tamil text, no conversion
   static pw.Widget _buildPDFCell(
     String text, {
     bool bold = false,
     pw.TextAlign align = pw.TextAlign.left,
     int maxLines = 1,
   }) {
+    // Check if text contains Tamil characters and use Tamil font
+    final isTamil = _containsTamilCharacters(text);
+    final tamilFont = isTamil ? _getTamilFont(bold: bold) : null;
+
+    // Warn if Tamil text detected but font not available
+    if (isTamil && tamilFont == null) {
+      debugPrint('⚠️ WARNING: Tamil text detected but Tamil font not loaded: "$text"');
+      debugPrint('   Make sure TamilFontLoader.initializeFonts() is called in main()');
+    }
+
+    // Use Tamil font for Tamil text, default font for English
     return pw.Container(
       padding: const pw.EdgeInsets.all(6),
       child: pw.Text(
-        text,
+        text, // Pure Tamil text - no conversion
         style: pw.TextStyle(
           fontSize: 9,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          font: tamilFont, // Use Tamil font if available (null = default font)
         ),
         textAlign: align,
         maxLines: maxLines,
@@ -494,6 +690,8 @@ class PDFExportService {
     }
   }
 
+  /// Get particulars (customer name or ledger name) from transaction
+  /// Note: Tamil text will be rendered using Tamil fonts in PDF via _buildPDFCellWithTamil
   static String _getParticulars(Map<String, dynamic> transaction) {
     final customerName = transaction['customerName']?.toString() ?? '';
     final ledgerName = transaction['ledgerName']?.toString() ?? '';
@@ -505,6 +703,8 @@ class PDFExportService {
 
   static String _getTransactionTypeDisplay(Map<String, dynamic> transaction) {
     final isCredit = transaction['isCredit'] == true;
-    return isCredit ? 'Payment In' : 'Payment Out';
+    // Payment IN = DEBIT (isCredit = false) → "Payment In"
+    // Payment OUT = CREDIT (isCredit = true) → "Payment Out"
+    return isCredit ? 'Payment Out' : 'Payment In';
   }
 }

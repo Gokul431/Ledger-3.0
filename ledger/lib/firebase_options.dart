@@ -50,19 +50,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDuKeOrDicwQiA6ggIFmRxIZwuigSlUVlE',
-    appId: '1:1021995791503:android:b9ac626077c186d59c2cfa',
-    messagingSenderId: '1021995791503',
-    projectId: 'ledger-72910',
-    storageBucket: 'ledger-72910.firebasestorage.app',
+    apiKey: 'AIzaSyB2Nsx12qHZ3aUyeNuxVu3Uhj7w9viWous',
+    appId: '1:582085220530:android:7e757a07aa07b6be4091ab',
+    messagingSenderId: '582085220530',
+    projectId: 'ledger-prod-17fa0',
+    storageBucket: 'ledger-prod-17fa0.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAoHuLZolSVj6d1VUU7vfbMELPqHJdhMJ0',
-    appId: '1:1021995791503:ios:cc92aaa96313e8d69c2cfa',
-    messagingSenderId: '1021995791503',
-    projectId: 'ledger-72910',
-    storageBucket: 'ledger-72910.firebasestorage.app',
+    apiKey: 'AIzaSyCf_jjFk3PWT3x1RH0deQxRwufvGt0mtV4',
+    appId: '1:582085220530:ios:c2f96a90aaf32ad94091ab',
+    messagingSenderId: '582085220530',
+    projectId: 'ledger-prod-17fa0',
+    storageBucket: 'ledger-prod-17fa0.firebasestorage.app',
     iosBundleId: 'com.ledger.ledger',
   );
+
 }

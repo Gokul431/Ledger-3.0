@@ -7,11 +7,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'widgets/AppBottomBar.dart';
 import 'SubmitFeedbackPage.dart';
 import 'BackupDataPage.dart';
-import 'ExportLedgerPage.dart';
 import 'AnalyticsPage.dart';
 import 'LoginScreen.dart';
 import 'EmployeesPage.dart';
 import 'ChangeCredentialsPage.dart';
+import 'ledgerlist.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -535,24 +535,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     Divider(height: 1, thickness: 1, color: Colors.grey[200]),
                   ],
-
-                  // Export Ledger - Available for BOTH Admin and Employee
-                  _buildSettingsItem(
-                    icon: Icons.download_outlined,
-                    title: 'Export Ledger as PDF / Excel',
-                    subtitle: 'Download ledgers by date range',
-                    hasTrailingArrow: true,
-                    isLandscape: isLandscape,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ExportLedgerPage(),
-                        ),
-                      );
-                    },
-                  ),
-                  Divider(height: 1, thickness: 1, color: Colors.grey[200]),
 
                   // Submit Feedback - Available for BOTH Admin and Employee
                   _buildSettingsItem(

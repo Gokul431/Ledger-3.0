@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,8 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 class CloseLedgerScreen extends StatefulWidget {
   final DateTime date;
   final String? shopCollection;
+  final bool startInEditMode;
 
-  const CloseLedgerScreen({super.key, required this.date, this.shopCollection});
+  const CloseLedgerScreen({
+    super.key,
+    required this.date,
+    this.shopCollection,
+    this.startInEditMode = false,
+  });
 
   @override
   State<CloseLedgerScreen> createState() => _CloseLedgerScreenState();
@@ -18,9 +25,14 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
   final List<int> denominations = [500, 100, 50, 20, 10, 1];
   late List<TextEditingController> _controllers;
   late TextEditingController _salesController;
+  late TextEditingController _cashOutController;
   late List<int> _denominationTotals;
 
   bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isEditMode = false;
+  bool _isInitialLoad = true;
+  Timer? _debounceTimer;
 
   int _openingBalance = 0;
   int _closingBalance = 0;
@@ -41,6 +53,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
       (_) => TextEditingController(),
     );
     _salesController = TextEditingController();
+    _cashOutController = TextEditingController();
     _denominationTotals = List.generate(denominations.length, (_) => 0);
 
     for (int i = 0; i < _controllers.length; i++) {
@@ -65,50 +78,11 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         _selectedShopCollection = shopCollection;
       });
 
-      if (_isEmployeeLogin) {
-        // Employee can only view, not close
-        _showEmployeeRestrictedDialog();
-        return;
-      }
-
       await _loadLedgerData();
     } catch (e) {
       debugPrint('Error initializing: $e');
       setState(() => _isLoading = false);
     }
-  }
-
-  void _showEmployeeRestrictedDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.lock, color: Colors.red[700], size: 28),
-            const SizedBox(width: 12),
-            const Text('Access Restricted'),
-          ],
-        ),
-        content: const Text(
-          'Employees cannot close ledgers.\nOnly Admin can close ledgers.',
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
-            ),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _updateTotal(int index) {
@@ -180,6 +154,15 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         }
         
         _salesController.text = (data?['saleValue'] ?? 0).toString();
+        _cashOutController.text = (data?['cashOut'] ?? 0).toString();
+
+        // Auto-enter edit mode if requested (only on initial load)
+        if (widget.startInEditMode && _isInitialLoad) {
+          _isEditMode = true;
+        }
+        
+        // Mark that initial load is complete
+        _isInitialLoad = false;
       } else {
         // Set all denominations to 0 (removed auto-calculation)
         for (int i = 0; i < denominations.length; i++) {
@@ -220,6 +203,12 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
   }
 
   Future<void> _saveLedgerToFirestore() async {
+    // Prevent duplicate submissions
+    // Allow saving if in edit mode (even if ledger is closed)
+    if (_isSaving || (_ledgerClosed && !_isEditMode)) {
+      return;
+    }
+
     // Validate sales value
     if (_salesController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -245,55 +234,288 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    // Validate cash out value
+    if (_cashOutController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter cash out value'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-    try {
-      if (_selectedShopCollection == null) {
-        throw Exception('Shop collection not available');
+    final double cashOut =
+        double.tryParse(_cashOutController.text.replaceAll(',', '').trim()) ??
+        0.0;
+
+    if (cashOut < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid cash out value (must be >= 0)'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Cancel any existing debounce timer
+    _debounceTimer?.cancel();
+
+    // Set saving state immediately to disable button
+    setState(() {
+      _isSaving = true;
+      _isLoading = true;
+    });
+
+    // Debounce: wait 400ms before sending the update
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () async {
+      await _performSave(salesValue, cashOut);
+    });
+  }
+
+  Future<void> _performSave(double salesValue, double cashOut) async {
+    const maxRetries = 3;
+    const timeoutDuration = Duration(seconds: 30);
+    int retryCount = 0;
+
+    while (retryCount < maxRetries) {
+      try {
+        if (_selectedShopCollection == null) {
+          throw Exception('Shop collection not available');
+        }
+
+        final firestore = FirebaseFirestore.instance;
+        final ledgerDate = DateFormat('dd-MMM-yyyy').format(_selectedDate);
+
+        // Reference: shopCollection/ledgers/dates/{ledgerDate}
+        final docRef = firestore
+            .collection(_selectedShopCollection!)
+            .doc('ledgers')
+            .collection('dates')
+            .doc(ledgerDate);
+
+        // Store ONLY user inputs (counts), not calculated values
+        // Calculate closing balance from user inputs at save time
+        final Map<String, int> denominationMap = {};
+        int closingBalance = 0;
+
+        for (int i = 0; i < denominations.length; i++) {
+          // Get user input count
+          final count = int.tryParse(_controllers[i].text) ?? 0;
+          // Ensure count is non-negative
+          final safeCount = count < 0 ? 0 : count;
+          
+          // Store only the count (user input)
+          denominationMap[denominations[i].toString()] = safeCount;
+          
+          // Calculate closing balance from user inputs
+          closingBalance += safeCount * denominations[i];
+          
+          // Update _denominationTotals to keep UI in sync
+          _denominationTotals[i] = safeCount * denominations[i];
+        }
+
+        // Validate closing balance is non-negative
+        if (closingBalance < 0) {
+          throw Exception(
+              'Invalid closing balance: $closingBalance. Please check denomination counts.');
+        }
+
+        // Debug logging
+        debugPrint('Saving ledger with user inputs:');
+        debugPrint('  Denominations (counts): $denominationMap');
+        debugPrint('  Calculated Closing Balance: $closingBalance');
+        debugPrint('  Sales Value: $salesValue');
+
+        // Use transaction with timeout to ensure atomic update
+        await firestore.runTransaction(
+          (transaction) async {
+            // Get document with timeout handling
+            final doc = await transaction.get(docRef).timeout(
+              timeoutDuration,
+              onTimeout: () {
+                throw Exception(
+                    'Network timeout. Please check your internet connection and try again.');
+              },
+            );
+
+            if (!doc.exists) {
+              throw Exception('Ledger document not found');
+            }
+
+            final data = doc.data();
+            final existingLastUpdated = data?['lastUpdated'];
+
+            // Check if there's a newer update already saved
+            // Use server timestamp comparison to avoid client clock issues
+            if (existingLastUpdated != null) {
+              int existingTimestamp = 0;
+              if (existingLastUpdated is int) {
+                existingTimestamp = existingLastUpdated;
+              } else if (existingLastUpdated is double) {
+                existingTimestamp = existingLastUpdated.toInt();
+              } else if (existingLastUpdated is Timestamp) {
+                existingTimestamp = existingLastUpdated.millisecondsSinceEpoch;
+              } else if (existingLastUpdated is Map) {
+                // Handle Firestore Timestamp format (when serialized)
+                final seconds = existingLastUpdated['_seconds'] as int? ?? 0;
+                final nanoseconds = existingLastUpdated['_nanoseconds'] as int? ?? 0;
+                existingTimestamp = (seconds * 1000) + (nanoseconds ~/ 1000000);
+              }
+
+              // Use server timestamp for comparison to avoid client clock issues
+              // Get current server time for accurate comparison
+              final serverTime = Timestamp.now();
+              final currentServerMillis = serverTime.millisecondsSinceEpoch;
+
+              // Allow update if our server time is newer, or if existing is more than 1 second old
+              // This handles slow network where client timestamp might be slightly behind
+              if (currentServerMillis <= existingTimestamp - 1000) {
+                throw Exception(
+                    'A newer update was already saved. Please refresh and try again.');
+              }
+            }
+
+            // Update the ledger document - Store only user inputs
+            // closingBalance is calculated from denominations at read time
+            final updateData = <String, dynamic>{
+              // Store user inputs only
+              'denominations': denominationMap, // User input counts
+              'saleValue': salesValue, // User input
+              'cashOut': cashOut, // User input
+              // Calculate and store closing balance from user inputs
+              'closingBalance': closingBalance,
+              // Use server timestamp to avoid client clock issues
+              'lastUpdated': FieldValue.serverTimestamp(),
+            };
+
+            if (_isEditMode) {
+              // In edit mode, update existing closed ledger
+              updateData['updatedAt'] = FieldValue.serverTimestamp();
+              updateData['status'] = 'Closed';
+              // Don't update closedAt - keep original
+            } else {
+              // First time closing
+              updateData['status'] = 'Closed';
+              updateData['closedAt'] = FieldValue.serverTimestamp();
+            }
+
+            transaction.update(docRef, updateData);
+          },
+        ).timeout(
+          timeoutDuration,
+          onTimeout: () {
+            throw Exception(
+                'Network timeout. Please check your internet connection and try again.');
+          },
+        );
+
+        // Success - update local state
+        _closingBalance = closingBalance;
+        _ledgerClosed = true;
+
+        // Reset saving state
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+            // Keep _isLoading true if in edit mode (will reload after dialog)
+            // Set to false if not in edit mode (will show success dialog)
+            if (!_isEditMode) {
+              _isLoading = false;
+            }
+          });
+        }
+
+        if (!mounted) return;
+        if (_isEditMode) {
+          _showUpdateSuccessDialog(closingBalance);
+        } else {
+          _showSuccessDialog(closingBalance);
+        }
+
+        // Success - exit retry loop
+        return;
+      } catch (e) {
+        retryCount++;
+        debugPrint('Error closing ledger (attempt $retryCount/$maxRetries): $e');
+
+        // Check if it's a network-related error that we should retry
+        final errorString = e.toString().toLowerCase();
+        final isNetworkError = errorString.contains('network') ||
+            errorString.contains('timeout') ||
+            errorString.contains('connection') ||
+            errorString.contains('unavailable') ||
+            errorString.contains('failed host lookup') ||
+            errorString.contains('socketexception');
+
+        // Don't retry for validation errors or timestamp conflicts
+        final isNonRetryableError = errorString.contains('newer update') ||
+            errorString.contains('invalid') ||
+            errorString.contains('not found') ||
+            errorString.contains('collection not available');
+
+        if (isNonRetryableError || retryCount >= maxRetries) {
+          // Final attempt failed or non-retryable error
+          if (mounted) {
+            String errorMessage = _getUserFriendlyErrorMessage(e);
+            
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+                action: isNetworkError && retryCount >= maxRetries
+                    ? SnackBarAction(
+                        label: 'Retry',
+                        textColor: Colors.white,
+                        onPressed: () {
+                          _saveLedgerToFirestore();
+                        },
+                      )
+                    : null,
+              ),
+            );
+
+            // Reload data if there was a conflict
+            if (errorString.contains('newer update')) {
+              await _loadLedgerData();
+            }
+          }
+          break;
+        }
+
+        // Wait before retrying (exponential backoff)
+        if (retryCount < maxRetries) {
+          await Future.delayed(Duration(milliseconds: 500 * retryCount));
+        }
       }
+    }
 
-      final firestore = FirebaseFirestore.instance;
-      final ledgerDate = DateFormat('dd-MMM-yyyy').format(_selectedDate);
-
-      // Reference: shopCollection/ledgers/dates/{ledgerDate}
-      final docRef = firestore
-          .collection(_selectedShopCollection!)
-          .doc('ledgers')
-          .collection('dates')
-          .doc(ledgerDate);
-
-      final Map<String, int> denominationMap = {};
-      for (int i = 0; i < denominations.length; i++) {
-        denominationMap[denominations[i].toString()] =
-            int.tryParse(_controllers[i].text) ?? 0;
-      }
-
-      int closingBalance = _denominationTotals.fold(0, (sum, t) => sum + t);
-
-      // Update the ledger document
-      await docRef.update({
-        'closingBalance': closingBalance,
-        'denominations': denominationMap,
-        'totals': _denominationTotals,
-        'saleValue': salesValue,
-        'status': 'Closed',
-        'closedAt': FieldValue.serverTimestamp(),
+    // If we get here, all retries failed
+    if (mounted) {
+      setState(() {
+        _isSaving = false;
+        _isLoading = false;
       });
+    }
+  }
 
-      _closingBalance = closingBalance;
-      _ledgerClosed = true;
-
-      if (!mounted) return;
-      _showSuccessDialog(closingBalance);
-    } catch (e) {
-      debugPrint('Error closing ledger: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to close ledger: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+  String _getUserFriendlyErrorMessage(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+    
+    if (errorString.contains('network') || errorString.contains('timeout')) {
+      return 'Network connection issue. Please check your internet and try again.';
+    } else if (errorString.contains('connection') || errorString.contains('unavailable')) {
+      return 'Unable to connect to server. Please check your internet connection.';
+    } else if (errorString.contains('newer update')) {
+      return 'A newer update was already saved. Please refresh and try again.';
+    } else if (errorString.contains('not found')) {
+      return 'Ledger document not found. Please refresh the page.';
+    } else if (errorString.contains('invalid')) {
+      return error.toString().replaceFirst('Exception: ', '');
+    } else {
+      return 'Failed to save ledger. Please try again.';
     }
   }
 
@@ -364,7 +586,92 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     );
   }
 
+  void _showUpdateSuccessDialog(int closingBalance) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.check_circle,
+                  color: Colors.blue[600],
+                  size: 60,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Ledger Updated!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Your ledger has been updated successfully with closing balance of ₹${NumberFormat('#,##,##0').format(closingBalance)}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    // Exit edit mode
+                    setState(() {
+                      _isEditMode = false;
+                    });
+                    // Reload ledger data to get the latest values from Firestore
+                    // _loadLedgerData() will handle the loading state
+                    await _loadLedgerData();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4285F4),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditMode = false;
+    });
+    // Reload data to restore original values
+    _loadLedgerData();
+  }
+
   void _showConfirmCloseDialog() {
+    if (_isSaving || (_ledgerClosed && !_isEditMode)) {
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -382,14 +689,16 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _isSaving ? null : () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _saveLedgerToFirestore();
-            },
+            onPressed: _isSaving
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _saveLedgerToFirestore();
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red[600],
               foregroundColor: Colors.white,
@@ -401,12 +710,57 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     );
   }
 
+  void _showConfirmUpdateDialog() {
+    if (_isSaving || !_isEditMode) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange[700], size: 28),
+            const SizedBox(width: 12),
+            const Text('Confirm Update'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to update this closed ledger?\nThe changes will be saved with a new timestamp.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _isSaving ? null : () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: _isSaving
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _saveLedgerToFirestore();
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4285F4),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Update Ledger'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     for (var controller in _controllers) {
       controller.dispose();
     }
     _salesController.dispose();
+    _cashOutController.dispose();
     super.dispose();
   }
 
@@ -434,6 +788,29 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
             ),
           ],
         ),
+        actions: _ledgerClosed && !_isEditMode && !_isEmployeeLogin
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  tooltip: 'Edit Ledger',
+                  onPressed: () {
+                    setState(() {
+                      _isEditMode = true;
+                    });
+                  },
+                ),
+              ]
+            : _isEditMode
+                ? [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Cancel Edit',
+                      onPressed: () {
+                        _cancelEdit();
+                      },
+                    ),
+                  ]
+                : null,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -508,9 +885,11 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _ledgerClosed
+                          _ledgerClosed && !_isEditMode
                               ? 'Ledger closed - View only'
-                              : 'Enter the count of each denomination',
+                              : _isEditMode
+                                  ? 'Editing closed ledger values'
+                                  : 'Enter the count of each denomination',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -567,7 +946,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                 Container(
                                   width: 70,
                                   decoration: BoxDecoration(
-                                    color: _ledgerClosed
+                                    color: (_ledgerClosed && !_isEditMode)
                                         ? Colors.grey[200]
                                         : Colors.grey[50],
                                     borderRadius: BorderRadius.circular(8),
@@ -579,7 +958,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                     controller: _controllers[i],
                                     keyboardType: TextInputType.number,
                                     textAlign: TextAlign.center,
-                                    enabled: !_ledgerClosed,
+                                    enabled: !_ledgerClosed || _isEditMode,
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
@@ -592,6 +971,17 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                       ),
                                       border: InputBorder.none,
                                     ),
+                                    onTap: () {
+                                      // Select all text when tapped, especially if it's "0"
+                                      if (_controllers[i].text == '0' || _controllers[i].text.isEmpty) {
+                                        _controllers[i].clear();
+                                      } else {
+                                        _controllers[i].selection = TextSelection(
+                                          baseOffset: 0,
+                                          extentOffset: _controllers[i].text.length,
+                                        );
+                                      }
+                                    },
                                   ),
                                 ),
                                 const Spacer(),
@@ -703,7 +1093,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                         TextField(
                           controller: _salesController,
                           keyboardType: TextInputType.number,
-                          enabled: !_ledgerClosed,
+                          enabled: !_ledgerClosed || _isEditMode,
                           style: const TextStyle(fontSize: 14),
                           decoration: InputDecoration(
                             hintText: 'Enter today\'s sales value...',
@@ -712,7 +1102,65 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                               color: Colors.grey[400],
                             ),
                             filled: true,
-                            fillColor: _ledgerClosed
+                            fillColor: (_ledgerClosed && !_isEditMode)
+                                ? Colors.grey[200]
+                                : Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF4285F4),
+                                width: 2,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Cash Out (Required)
+                        Row(
+                          children: [
+                            const Text(
+                              'Cash Out',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '*',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _cashOutController,
+                          keyboardType: TextInputType.number,
+                          enabled: !_ledgerClosed || _isEditMode,
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            hintText: 'Enter cash out amount...',
+                            hintStyle: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[400],
+                            ),
+                            filled: true,
+                            fillColor: (_ledgerClosed && !_isEditMode)
                                 ? Colors.grey[200]
                                 : Colors.white,
                             border: OutlineInputBorder(
@@ -741,7 +1189,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                 ],
               ),
             ),
-      bottomNavigationBar: _ledgerClosed
+      bottomNavigationBar: (_ledgerClosed && !_isEditMode)
           ? null
           : SafeArea(
               child: Container(
@@ -761,16 +1209,18 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     Expanded(
                       flex: 2,
                       child: TextButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _isEditMode
+                            ? _cancelEdit
+                            : () => Navigator.pop(context),
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
+                        child: Text(
+                          _isEditMode ? 'Cancel Edit' : 'Cancel',
+                          style: const TextStyle(
                             color: Colors.black54,
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -782,30 +1232,62 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     Expanded(
                       flex: 3,
                       child: ElevatedButton(
-                        onPressed: _showConfirmCloseDialog,
+                        onPressed: (_isSaving || (_ledgerClosed && !_isEditMode))
+                            ? null
+                            : _isEditMode
+                                ? _showConfirmUpdateDialog
+                                : _showConfirmCloseDialog,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF4285F4),
                           foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey[400],
+                          disabledForegroundColor: Colors.white70,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                           elevation: 2,
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.check_circle, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'Close Ledger',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
+                        child: _isSaving
+                            ? const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Saving...',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _isEditMode ? Icons.save : Icons.check_circle,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _isEditMode ? 'Save Changes' : 'Close Ledger',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ],

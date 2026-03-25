@@ -189,12 +189,17 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         final data = doc.data();
         final amount = (data['amount'] ?? 0).toDouble();
         final isCredit = data['isCredit'] ?? false;
+
+        // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE outstanding (subtract)
+        // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE outstanding (add)
         if (isCredit) {
-          totalPaymentIn += amount;
+          totalPaymentOut += amount; // Payment OUT (CREDIT)
         } else {
-          totalPaymentOut += amount;
+          totalPaymentIn += amount; // Payment IN (DEBIT)
         }
       }
+      // ✅ CORRECT FORMULA: Outstanding = Opening - Payment IN + Payment OUT
+      // Payment IN reduces what customer owes, Payment OUT increases what customer owes
       return openingAmount - totalPaymentIn + totalPaymentOut;
     } catch (e) {
       debugPrint('Error calculating outstanding: $e');
@@ -244,83 +249,130 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: Column(
+      builder: (context) => SafeArea(
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Handle bar
                   Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
                     width: 40,
-                    height: 5,
+                    height: 4,
                     decoration: BoxDecoration(
                       color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    currentName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Column(
+                      children: [
+                        Text(
+                          currentName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Customer Options',
+                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Customer Options',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 20),
-                  _buildOptionTile(
-                    icon: Icons.edit,
-                    title: 'Edit Name',
-                    color: const Color(0xFF4285F4),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showEditNameDialog(customerId, currentName);
-                    },
-                  ),
-                  _buildOptionTile(
-                    icon: isCurrentlyActive ? Icons.check_circle : Icons.cancel,
-                    title: isCurrentlyActive ? 'Active' : 'Inactive',
-                    color: isCurrentlyActive ? Colors.green : Colors.red,
-                    trailing: Switch(
-                      value: isCurrentlyActive,
-                      activeColor: Colors.green,
-                      onChanged: (value) async {
-                        setModalState(() => isCurrentlyActive = value);
-                        await _updateCustomerStatus(customerId, value);
-                        if (mounted) setState(() {});
-                      },
+                  const Divider(height: 1),
+                  // Scrollable options list
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildOptionTile(
+                            icon: Icons.edit,
+                            title: 'Edit Name',
+                            color: const Color(0xFF4285F4),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showEditNameDialog(customerId, currentName);
+                            },
+                          ),
+                          FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection(_selectedShopCollection!)
+                                .doc('customers')
+                                .collection('list')
+                                .doc(customerId)
+                                .get(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return const SizedBox.shrink();
+                              }
+                              final data = snapshot.data!.data() as Map<String, dynamic>?;
+                              final openingAmount = (data?['openingAmount'] ?? 0).toDouble();
+                              
+                              return _buildOptionTile(
+                                icon: Icons.account_balance_wallet,
+                                title: 'Edit Opening Amount',
+                                subtitle: 'Current: ₹${NumberFormat('#,##,##0.00').format(openingAmount)}',
+                                color: Colors.orange[700]!,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _showEditOpeningAmountDialog(customerId, openingAmount);
+                                },
+                              );
+                            },
+                          ),
+                          _buildOptionTile(
+                            icon: isCurrentlyActive ? Icons.check_circle : Icons.cancel,
+                            title: isCurrentlyActive ? 'Active' : 'Inactive',
+                            color: isCurrentlyActive ? Colors.green : Colors.red,
+                            trailing: Switch(
+                              value: isCurrentlyActive,
+                              activeColor: Colors.green,
+                              onChanged: (value) async {
+                                setModalState(() => isCurrentlyActive = value);
+                                await _updateCustomerStatus(customerId, value);
+                                if (mounted) setState(() {});
+                              },
+                            ),
+                          ),
+                          _buildOptionTile(
+                            icon: Icons.delete_forever,
+                            title: 'Delete Customer',
+                            color: Colors.red,
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showDeleteConfirmation(customerId, currentName);
+                            },
+                          ),
+                          // Extra bottom padding for safe area
+                          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+                        ],
+                      ),
                     ),
                   ),
-                  _buildOptionTile(
-                    icon: Icons.delete_forever,
-                    title: 'Delete Customer',
-                    color: Colors.red,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showDeleteConfirmation(customerId, currentName);
-                    },
-                  ),
-                  const SizedBox(height: 10),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -332,6 +384,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     required Color color,
     Widget? trailing,
     VoidCallback? onTap,
+    String? subtitle,
   }) {
     return ListTile(
       leading: Icon(icon, color: color),
@@ -339,6 +392,16 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         title,
         style: TextStyle(color: color, fontWeight: FontWeight.w600),
       ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w400,
+              ),
+            )
+          : null,
       trailing: trailing,
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
@@ -354,13 +417,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.person, color: Color(0xFF4285F4)),
-            SizedBox(width: 8),
-            Text('Edit Customer Name'),
-          ],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Edit name',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
         ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 300),
@@ -442,6 +506,138 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           .update({'status': isActive ? 'Active' : 'Inactive'});
     } catch (e) {
       debugPrint('Error updating status: $e');
+    }
+  }
+
+  /// Show dialog to edit customer opening amount
+  void _showEditOpeningAmountDialog(String customerId, double currentAmount) {
+    final TextEditingController controller = TextEditingController(
+      text: currentAmount.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          scrollable: true,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          title: const Text(
+            'Edit Opening Amount',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current: ₹${NumberFormat('#,##,##0.00').format(currentAmount)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'New opening amount',
+                  hintText: 'Enter amount',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This will update the outstanding balance calculation.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final amountText =
+                    controller.text.trim().replaceAll(',', '');
+                final newAmount = double.tryParse(amountText);
+
+                if (newAmount == null) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid amount'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                await _updateOpeningAmount(customerId, newAmount);
+                if (mounted) Navigator.pop(dialogContext);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4285F4),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Update customer opening amount
+  Future<void> _updateOpeningAmount(String customerId, double newAmount) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection(_selectedShopCollection!)
+          .doc('customers')
+          .collection('list')
+          .doc(customerId)
+          .update({'openingAmount': newAmount});
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Opening amount updated to ₹${NumberFormat('#,##,##0.00').format(newAmount)}',
+            ),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+        // Refresh the list to show updated outstanding amounts
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating opening amount: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -767,9 +963,12 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     final status = data['status'] ?? 'Active';
     final isActive = status == 'Active';
 
-    Color amountColor = outstandingAmount < 0
-        ? const Color(0xFFF44336)
-        : const Color(0xFF4CAF50);
+    // Positive amount (customer owes us) = RED
+    // Negative amount (we owe customer) = GREEN
+    final bool isPositive = outstandingAmount >= 0;
+    Color amountColor = isPositive
+        ? const Color(0xFFF44336) // Red for positive (customer owes)
+        : const Color(0xFF4CAF50); // Green for negative (we owe)
 
     return Column(
       children: [
@@ -882,7 +1081,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 Row(
                   children: [
                     Text(
-                      _formatAmount(outstandingAmount),
+                      _formatAmount(outstandingAmount.abs()),
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: isLandscape ? 15.5 : 16.5,
@@ -958,14 +1157,13 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ),
             onPressed: _toggleSearch,
           ),
-          if (!_isEmployeeLogin)
-            IconButton(
-              icon: Icon(Icons.add_circle_outline, size: isLandscape ? 24 : 26),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddCustomer()),
-              ),
+          IconButton(
+            icon: Icon(Icons.add_circle_outline, size: isLandscape ? 24 : 26),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AddCustomer()),
             ),
+          ),
           SizedBox(width: isLandscape ? 12 : 8),
         ],
       ),

@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'ledgerlist.dart';
 import 'splashscreen.dart';
 import 'firebase_options.dart';
+import 'font_loader.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +18,14 @@ Future<void> main() async {
       statusBarIconBrightness: Brightness.light, // Light icons for status bar
     ),
   );
+
+  // Initialize Tamil fonts for PDF generation
+  try {
+    await TamilFontLoader.initializeFonts();
+  } catch (e) {
+    print('Warning: Failed to load Tamil fonts for PDF: $e');
+    // Continue app startup even if fonts fail to load
+  }
 
   try {
     await Firebase.initializeApp(

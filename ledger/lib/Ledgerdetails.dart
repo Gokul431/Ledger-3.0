@@ -8,8 +8,11 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:excel/excel.dart' as excel;
+import 'package:share_plus/share_plus.dart';
 import 'Closeledger.dart';
 import 'Createtransaction.dart';
 
@@ -276,14 +279,17 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           description.toLowerCase() != 'customer transaction') {
         return description;
       }
-      return isCredit ? 'Customer Credit' : 'Customer Payment';
+      // Payment IN = DEBIT (isCredit = false) = Customer Debit (money coming in) = GREEN
+      // Payment OUT = CREDIT (isCredit = true) = Customer Credit (money going out) = RED
+      return isCredit ? 'Customer Credit' : 'Customer Debit';
     }
 
     // For General transactions - show professional label instead of repeating name
     if (transactionType == 'General') {
       // Ignore generic descriptions like "Petrol", "Rent", etc.
-      // Just show the transaction type
-      return isCredit ? 'General Credit' : 'General Expense';
+      // Payment IN = DEBIT (isCredit = false) = General Debit (money coming in)
+      // Payment OUT = CREDIT (isCredit = true) = General Credit (money going out)
+      return isCredit ? 'General Credit' : 'General Debit';
     }
 
     return description.isNotEmpty ? description : 'Transaction';
@@ -488,13 +494,36 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     final double amount = (data['amount'] ?? 0).toDouble();
     final createdAt = (data['createdAt'] as Timestamp).toDate();
 
-    final statusColor = isCredit ? Colors.green : Colors.red;
+    // Payment IN = DEBIT (isCredit = false) = GREEN
+    // Payment OUT = CREDIT (isCredit = true) = RED
+    final statusColor = isCredit ? Colors.red : Colors.green;
+    
+    // Check if transaction has a bill
+    final hasBill = data['billPhotoUrl'] != null &&
+        data['billPhotoUrl'].toString().isNotEmpty;
+    
+    // Debug: Verify the logic
+    debugPrint('Transaction: $title, isCredit: $isCredit, Color: ${isCredit ? "RED" : "GREEN"}, Subtitle: $subtitle');
 
     return GestureDetector(
-      // Only allow long press for ADMIN users
-      onLongPress: !_isEmployeeLogin
-          ? () => _showTransactionOptionsDialog(context, doc, data)
-          : () => _showEmployeeRestrictedDialog(),
+      // Allow long press for both admin and employee
+      // Admin: Full options (View Bill, Edit, Delete)
+      // Employee: View Bill only (if bill exists)
+      onLongPress: () {
+        if (_isEmployeeLogin) {
+          // Employee: Show bill viewer if bill exists, otherwise show restricted message
+          final hasBill = data['billPhotoUrl'] != null &&
+              data['billPhotoUrl'].toString().isNotEmpty;
+          if (hasBill) {
+            _showEmployeeBillOptionsDialog(context, data);
+          } else {
+            _showEmployeeRestrictedDialog();
+          }
+        } else {
+          // Admin: Show full options
+          _showTransactionOptionsDialog(context, doc, data);
+        }
+      },
       child: Column(
         children: [
           Container(
@@ -513,9 +542,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                     ),
                   ),
                   child: Icon(
+                    // Payment IN (isCredit=false) = money coming in = arrow up
+                    // Payment OUT (isCredit=true) = money going out = arrow down
                     isCredit
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_up,
                     color: statusColor,
                     size: isLandscape ? 12 : 14,
                   ),
@@ -525,15 +556,29 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: isLandscape ? 14.5 : 15.5,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: isLandscape ? 14.5 : 15.5,
+                                color: Colors.black87,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                          if (hasBill) ...[
+                            SizedBox(width: isLandscape ? 5 : 6),
+                            Icon(
+                              Icons.description,
+                              size: isLandscape ? 15 : 17,
+                              color: Colors.purple[600],
+                            ),
+                          ],
+                        ],
                       ),
                       SizedBox(height: isLandscape ? 2 : 3),
                       Text(
@@ -578,11 +623,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     DocumentSnapshot doc,
     Map<String, dynamic> data,
   ) {
-    // Check if ledger is closed
-    if (_isLedgerClosed) {
-      _showLedgerClosedDialog();
-      return;
-    }
+    // ✅ Allow admins to edit/delete even when ledger is closed
+    // Only block adding new transactions when ledger is closed
+    // (Check removed - admins can now edit/delete closed ledger transactions)
 
     final title = _getTransactionTitle(data);
     final amount = (data['amount'] ?? 0).toDouble();
@@ -593,10 +636,17 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (BuildContext context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        final hasBill = data['billPhotoUrl'] != null &&
+            data['billPhotoUrl'].toString().isNotEmpty;
+        final optionCount = hasBill ? 3 : 2;
+        final estimatedHeight = 150.0 + (optionCount * 72.0) + 32.0;
+        final maxHeight = screenHeight * 0.6;
+        final sheetHeight = estimatedHeight > maxHeight ? maxHeight : estimatedHeight;
+
         return Container(
-          // ✅ FIXED: Use constraints instead of fixed height
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.5,
+            maxHeight: maxHeight,
             minHeight: 280,
           ),
           decoration: const BoxDecoration(
@@ -618,9 +668,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   ),
                 ),
 
-                // Header
+                // Header - Fixed height
                 Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -639,7 +689,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: (isCredit ? Colors.green : Colors.red)
+                          // Payment IN = DEBIT (isCredit = false) = GREEN
+                          // Payment OUT = CREDIT (isCredit = true) = RED
+                          color: (isCredit ? Colors.red : Colors.green)
                               .withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -647,12 +699,13 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
+                              // Payment IN (isCredit=false) = add icon, Payment OUT (isCredit=true) = remove icon
                               isCredit
-                                  ? Icons.add_circle_outline
-                                  : Icons.remove_circle_outline,
+                                  ? Icons.remove_circle_outline
+                                  : Icons.add_circle_outline,
                               color: isCredit
-                                  ? Colors.green[700]
-                                  : Colors.red[700],
+                                  ? Colors.red[700]
+                                  : Colors.green[700],
                               size: 16,
                             ),
                             const SizedBox(width: 8),
@@ -661,8 +714,8 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: isCredit
-                                    ? Colors.green[700]
-                                    : Colors.red[700],
+                                    ? Colors.red[700]
+                                    : Colors.green[700],
                                 fontSize: 14,
                               ),
                             ),
@@ -681,12 +734,50 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   ),
                 ),
 
-                // Options - FIXED: Wrapped in Flexible to prevent overflow
+                // Options - Scrollable ListView to prevent overflow
                 Flexible(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: ListView(
+                    shrinkWrap: true,
+                    physics: const ClampingScrollPhysics(),
+                    padding: EdgeInsets.zero,
                     children: [
+                      // View Bill option (only if billPhotoUrl exists)
+                      if (hasBill)
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.purple[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.receipt_long,
+                              color: Colors.purple[700],
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'View Bill',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text('View and download bill photo'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _viewBill(data['billPhotoUrl'].toString(), title);
+                          },
+                        ),
+                      if (hasBill)
+                        const Divider(height: 1, indent: 20, endIndent: 20),
+
                       ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 4,
+                        ),
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -711,6 +802,10 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                       ),
 
                       ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 4,
+                        ),
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -733,12 +828,12 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                           _confirmDeleteTransaction(doc, data);
                         },
                       ),
+
+                      // Bottom padding for safe area
+                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 16),
                     ],
                   ),
                 ),
-
-                // Bottom padding for safe area
-                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -814,10 +909,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                 child: Row(
                   children: [
                     Icon(
+                      // Payment IN (isCredit=false) = add icon, Payment OUT (isCredit=true) = remove icon
                       isCredit
-                          ? Icons.add_circle_outline
-                          : Icons.remove_circle_outline,
-                      color: isCredit ? Colors.green[700] : Colors.red[700],
+                          ? Icons.remove_circle_outline
+                          : Icons.add_circle_outline,
+                      color: isCredit ? Colors.red[700] : Colors.green[700],
                       size: 18,
                     ),
                     const SizedBox(width: 8),
@@ -826,7 +922,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
-                        color: isCredit ? Colors.green[700] : Colors.red[700],
+                        // Payment IN = DEBIT (isCredit = false) = GREEN
+                        // Payment OUT = CREDIT (isCredit = true) = RED
+                        color: isCredit ? Colors.red[700] : Colors.green[700],
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -968,11 +1066,15 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           .toDouble();
 
       // Calculate new balance by removing the deleted transaction's impact
+      // Payment IN = DEBIT (isCredit = false) = subtracts from balance, so removing it adds back
+      // Payment OUT = CREDIT (isCredit = true) = adds to balance, so removing it subtracts
       double newBalance = currentClosingBalance;
       if (isCredit) {
-        newBalance -= amount; // Remove credit impact
+        // Payment OUT (CREDIT) added to balance, so subtract it when deleting
+        newBalance -= amount;
       } else {
-        newBalance += amount; // Remove debit impact
+        // Payment IN (DEBIT) subtracted from balance, so add it back when deleting
+        newBalance += amount;
       }
 
       // Update ledger document in the batch
@@ -984,6 +1086,192 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       debugPrint('Error updating balance for delete: $e');
       rethrow;
     }
+  }
+
+  /// View bill in full screen with zoom and download
+  void _viewBill(String billPhotoUrl, String transactionTitle) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _BillViewerScreen(
+          billPhotoUrl: billPhotoUrl,
+          transactionTitle: transactionTitle,
+        ),
+      ),
+    );
+  }
+
+  /// Show employee bill options dialog (View Bill only, no Edit/Delete)
+  void _showEmployeeBillOptionsDialog(
+    BuildContext context,
+    Map<String, dynamic> data,
+  ) {
+    final title = _getTransactionTitle(data);
+    final amount = (data['amount'] ?? 0).toDouble();
+    final isCredit = data['isCredit'] ?? false;
+    final hasBill = data['billPhotoUrl'] != null &&
+        data['billPhotoUrl'].toString().isNotEmpty;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+        final estimatedHeight = 150.0 + 72.0 + 32.0; // Header + View Bill option + padding
+        final maxHeight = screenHeight * 0.6;
+        final sheetHeight = estimatedHeight > maxHeight ? maxHeight : estimatedHeight;
+
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: maxHeight,
+            minHeight: 280,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // Header - Fixed height
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Transaction Options',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          // Payment IN = DEBIT (isCredit = false) = GREEN
+                          // Payment OUT = CREDIT (isCredit = true) = RED
+                          color: (isCredit ? Colors.red : Colors.green)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              // Payment IN (isCredit=false) = add icon, Payment OUT (isCredit=true) = remove icon
+                              isCredit
+                                  ? Icons.remove_circle_outline
+                                  : Icons.add_circle_outline,
+                              color: isCredit
+                                  ? Colors.red[700]
+                                  : Colors.green[700],
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '₹${amount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: isCredit
+                                    ? Colors.red[700]
+                                    : Colors.green[700],
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        title,
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Options - Only View Bill for employees
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    physics: const ClampingScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // View Bill option (only if bill exists)
+                      if (hasBill)
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 4,
+                          ),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.purple[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.receipt_long,
+                              color: Colors.purple[700],
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'View Bill',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text('View, download and share bill photo'),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _viewBill(data['billPhotoUrl'].toString(), title);
+                          },
+                        ),
+                      if (!hasBill)
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            'No bill photo available for this transaction.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+
+                      // Bottom padding for safe area
+                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 16),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Show employee restricted dialog
@@ -1006,7 +1294,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             ],
           ),
           content: const Text(
-            'You do not have permission to edit or delete transactions. Only administrators can modify transactions.',
+            'You do not have permission to edit or delete transactions. Only administrators can modify transactions.\n\nNote: You can view, download, and share bill photos by long-pressing transactions that have bills attached.',
             style: TextStyle(fontSize: 15),
           ),
           actions: [
@@ -1049,9 +1337,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
               ),
             ],
           ),
-          content: const Text(
-            'This ledger has been closed and locked. You cannot add, edit, or delete transactions in a closed ledger.',
-            style: TextStyle(fontSize: 15),
+          content: Text(
+            _isEmployeeLogin
+                ? 'This ledger has been closed and locked. You cannot add new transactions to a closed ledger. However, you can still view transactions and bills.'
+                : 'This ledger has been closed. As an admin, you can still add, edit, or delete transactions even when the ledger is closed.',
+            style: const TextStyle(fontSize: 15),
           ),
           actions: [
             TextButton(
@@ -1070,7 +1360,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   /// Handle add transaction button press
   void _handleAddTransaction() {
     if (!mounted) return;
-    if (_isLedgerClosed) {
+    // Admin can add transactions even when ledger is closed
+    // Employee cannot add transactions when ledger is closed
+    if (_isLedgerClosed && _isEmployeeLogin) {
       _showLedgerClosedDialog();
     } else {
       Navigator.push(
@@ -1086,6 +1378,220 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           _fetchLedgerByDate();
         }
       });
+    }
+  }
+
+  /// Show dialog to edit closing balance (Admin only, when ledger is closed)
+  void _showEditClosingBalanceDialog() {
+    if (_ledgerRef == null || _ledgerData == null) return;
+
+    final currentClosingBalance = (_ledgerData!['closingBalance'] ?? 0).toDouble();
+    final TextEditingController amountController = TextEditingController(
+      text: currentClosingBalance.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.edit_outlined, color: Color(0xFF4285F4), size: 24),
+              SizedBox(width: 12),
+              Text(
+                'Edit Closing Balance',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter the new closing balance amount:',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      'Current: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      '₹${NumberFormat('#,##,##0.00').format(currentClosingBalance)}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.green[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'New Closing Balance',
+                  hintText: 'Enter amount',
+                  prefixText: '₹ ',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This will update the closing balance across all pages.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.orange[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final amountText = amountController.text.trim().replaceAll(',', '');
+                final newAmount = double.tryParse(amountText);
+                
+                if (newAmount == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid amount'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                _updateClosingBalanceManually(newAmount);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4285F4),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Update',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Update closing balance manually (Admin only, for closed ledgers)
+  Future<void> _updateClosingBalanceManually(double newClosingBalance) async {
+    if (_ledgerRef == null) return;
+
+    try {
+      // Show loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text('Updating closing balance...'),
+              ],
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Update the ledger document
+      await _ledgerRef!.update({
+        'closingBalance': newClosingBalance,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Refresh ledger data
+      await _fetchLedgerByDate();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  'Closing balance updated to ₹${NumberFormat('#,##,##0.00').format(newClosingBalance)}',
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error updating closing balance: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating closing balance: $e'),
+            backgroundColor: Colors.red[600],
+          ),
+        );
+      }
     }
   }
 
@@ -1185,14 +1691,14 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     );
   }
 
-  Future<void> _saveAndShowPdf(pw.Document pdf, String fileName) async {
+  Future<void> _saveAndShowPdfBytes(Uint8List pdfBytes, String fileName) async {
     final output = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final fullName = '${fileName}_$timestamp.pdf';
     final filePath = '${output.path}/$fullName';
 
     final file = File(filePath);
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(pdfBytes);
     debugPrint('PDF saved to: $filePath');
     _showFileOptionsDialog(filePath, 'PDF');
   }
@@ -1205,6 +1711,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       final opening = (_ledgerData?['openingBalance'] ?? 0).toDouble();
       final closing = (_ledgerData?['closingBalance'] ?? 0).toDouble();
       final saleValue = (_ledgerData?['saleValue'] ?? 0).toDouble();
+      final cashOut = (_ledgerData?['cashOut'] ?? 0).toDouble();
 
       // ✅ Sort transactions by createdAt in memory before passing to export
       final List<Map<String, dynamic>> transactions = docs
@@ -1228,18 +1735,19 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       });
 
       // ✅ CALL generateLedgerPDF WITH isLedgerClosed PARAMETER
-      final pdf = PDFExportService.generateLedgerPDF(
+      final pdfBytes = await PDFExportService.generateLedgerPDF(
         date: widget.date,
         shopName: _selectedShopName ?? 'Shop',
         openingBalance: opening,
         closingBalance: closing,
         saleValue: saleValue,
+        cashOut: cashOut,
         transactions: transactions,
         isLedgerClosed: _isLedgerClosed, // ✅ ADD THIS LINE - Pass ledger status
       );
 
-      await _saveAndShowPdf(
-        pdf,
+      await _saveAndShowPdfBytes(
+        pdfBytes,
         'ledger_${_selectedShopCollection}_$ledgerDate',
       );
     } catch (e) {
@@ -1280,13 +1788,15 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         }
       });
 
-      // ✅ CALL generateLedgerExcel WITH isLedgerClosed PARAMETER (MATCHING PDF)
+      // ✅ CALL generateLedgerExcel WITH isLedgerClosed AND cashOut PARAMETER (MATCHING PDF)
+      final cashOut = (_ledgerData?['cashOut'] ?? 0).toDouble(); // Read cashOut
       final excelFile = ExcelExportService.generateLedgerExcel(
         date: widget.date,
         shopName: _selectedShopName ?? 'Shop',
         openingBalance: opening,
         closingBalance: closing,
         saleValue: saleValue,
+        cashOut: cashOut, // Pass cashOut
         transactions: transactions,
         isLedgerClosed: _isLedgerClosed, // ✅ ADD THIS LINE - Pass ledger status
       );
@@ -1454,35 +1964,34 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         ),
         actions: [
           IconButton(
+            icon: Icon(Icons.lock_outline, size: isLandscape ? 22 : 24),
+            tooltip: "Close Ledger",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CloseLedgerScreen(
+                    date: widget.date,
+                    shopCollection: _selectedShopCollection,
+                  ),
+                ),
+              ).then((_) {
+                if (mounted) {
+                  _fetchLedgerByDate();
+                }
+              });
+            },
+          ),
+          IconButton(
             icon: Icon(Icons.add_circle_outline, size: isLandscape ? 24 : 26),
-            tooltip: _isLedgerClosed
+            tooltip: (_isLedgerClosed && _isEmployeeLogin)
                 ? "Cannot add - Ledger is closed"
                 : "Add Transaction",
             onPressed: _ledgerRef == null ? null : _handleAddTransaction,
-            color: _isLedgerClosed
+            color: (_isLedgerClosed && _isEmployeeLogin)
                 ? Colors.white.withOpacity(0.4)
                 : Colors.white,
           ),
-          if (!_isEmployeeLogin)
-            IconButton(
-              icon: Icon(Icons.lock_outline, size: isLandscape ? 22 : 24),
-              tooltip: "Close Ledger",
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CloseLedgerScreen(
-                      date: widget.date,
-                      shopCollection: _selectedShopCollection,
-                    ),
-                  ),
-                ).then((_) {
-                  if (mounted) {
-                    _fetchLedgerByDate();
-                  }
-                });
-              },
-            ),
           SizedBox(width: isLandscape ? 12 : 8),
         ],
       ),
@@ -1645,6 +2154,8 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         final data = d.data();
                         final bool isCredit = data['isCredit'] ?? false;
                         final double amt = (data['amount'] ?? 0).toDouble();
+                        // Payment IN = DEBIT (isCredit = false) → adds to totalDebit
+                        // Payment OUT = CREDIT (isCredit = true) → adds to totalCredit
                         if (isCredit) {
                           totalCredit += amt;
                         } else {
@@ -1652,7 +2163,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         }
                       }
 
-                      final newClosing = opening + totalCredit - totalDebit;
+                      // ✅ CORRECT FORMULA: Closing Balance = Opening - Payment IN + Payment OUT
+                      // Payment IN = DEBIT = subtracts from balance
+                      // Payment OUT = CREDIT = adds to balance
+                      // Which is: Opening - Debit + Credit
+                      final newClosing = opening - totalDebit + totalCredit;
                       _updateClosingBalance(newClosing);
 
                       return Container(
@@ -1700,6 +2215,229 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Full-screen bill viewer with zoom and download functionality
+class _BillViewerScreen extends StatefulWidget {
+  final String billPhotoUrl;
+  final String transactionTitle;
+
+  const _BillViewerScreen({
+    required this.billPhotoUrl,
+    required this.transactionTitle,
+  });
+
+  @override
+  State<_BillViewerScreen> createState() => _BillViewerScreenState();
+}
+
+class _BillViewerScreenState extends State<_BillViewerScreen> {
+  final TransformationController _transformationController =
+      TransformationController();
+  bool _isDownloading = false;
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _downloadBill() async {
+    setState(() => _isDownloading = true);
+
+    try {
+      // Download image from URL
+      final response = await http.get(Uri.parse(widget.billPhotoUrl));
+      if (response.statusCode == 200) {
+        final Uint8List imageBytes = response.bodyBytes;
+
+        // Get download directory
+        final directory = await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName =
+            'bill_${widget.transactionTitle.replaceAll(' ', '_')}_$timestamp.jpg';
+        final filePath = '${directory.path}/$fileName';
+
+        // Save file
+        final file = File(filePath);
+        await file.writeAsBytes(imageBytes);
+
+        setState(() => _isDownloading = false);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Bill saved to: $fileName'),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green[600],
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Open',
+                textColor: Colors.white,
+                onPressed: () => OpenFile.open(filePath),
+              ),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Failed to download image: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading bill: $e'),
+            backgroundColor: Colors.red[600],
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareBill() async {
+    try {
+      setState(() => _isDownloading = true);
+
+      // Download image from URL
+      final response = await http.get(Uri.parse(widget.billPhotoUrl));
+      if (response.statusCode == 200) {
+        final Uint8List imageBytes = response.bodyBytes;
+
+        // Save to temporary directory
+        final directory = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName = 'bill_$timestamp.jpg';
+        final filePath = '${directory.path}/$fileName';
+
+        final file = File(filePath);
+        await file.writeAsBytes(imageBytes);
+
+        setState(() => _isDownloading = false);
+
+        // Share the file
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          text: 'Bill for ${widget.transactionTitle}',
+        );
+      } else {
+        throw Exception('Failed to download image: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing bill: $e'),
+            backgroundColor: Colors.red[600],
+          ),
+        );
+      }
+    }
+  }
+
+  void _resetZoom() {
+    _transformationController.value = Matrix4.identity();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black87,
+        foregroundColor: Colors.white,
+        title: Text(
+          widget.transactionTitle,
+          style: const TextStyle(fontSize: 16),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.zoom_out_map),
+            tooltip: 'Reset Zoom',
+            onPressed: _resetZoom,
+          ),
+          IconButton(
+            icon: _isDownloading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.download),
+            tooltip: 'Download Bill',
+            onPressed: _isDownloading ? null : _downloadBill,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            tooltip: 'Share Bill',
+            onPressed: _isDownloading ? null : _shareBill,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          transformationController: _transformationController,
+          minScale: 0.5,
+          maxScale: 4.0,
+          child: Image.network(
+            widget.billPhotoUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                      : null,
+                  color: Colors.white,
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.white,
+                      size: 64,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Failed to load bill image',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      error.toString(),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

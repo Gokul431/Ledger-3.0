@@ -12,6 +12,7 @@ import 'package:open_file/open_file.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'balance_details_screen.dart';
 
 class CustomerDetailScreen extends StatefulWidget {
   final String customerId;
@@ -371,6 +372,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       final mobile = customerData['mobile'] as String;
 
       // Calculate transactions and balance
+      // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE balance (subtract)
+      // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE balance (add)
       double runningBalance = openingAmount;
       final transactions = <Map<String, dynamic>>[];
 
@@ -380,9 +383,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         final isCredit = data['isCredit'] ?? false;
 
         if (isCredit) {
-          runningBalance -= amount;
+          runningBalance += amount; // Payment OUT increases what customer owes
         } else {
-          runningBalance += amount;
+          runningBalance -= amount; // Payment IN reduces what customer owes
         }
 
         transactions.add({...data, 'balance': runningBalance});
@@ -501,7 +504,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                             data['description'] ?? 'No description',
                           ),
                           _buildTableCell(
-                            isCredit ? 'Payment In' : 'Payment Out',
+                            // Payment IN = DEBIT (isCredit = false) → "Payment In"
+                            // Payment OUT = CREDIT (isCredit = true) → "Payment Out"
+                            isCredit ? 'Payment Out' : 'Payment In',
                           ),
                           _buildTableCell('Rs. ${_formatAmount(amount)}'),
                           _buildTableCell('Rs. ${_formatAmount(balance)}'),
@@ -696,6 +701,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       }
 
       // Add transaction data
+      // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE balance (subtract)
+      // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE balance (add)
       double runningBalance = openingAmount;
       for (var doc in docs.reversed) {
         row++;
@@ -706,9 +713,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         final description = data['description'] ?? 'No description';
 
         if (isCredit) {
-          runningBalance -= amount;
+          runningBalance += amount; // Payment OUT increases what customer owes
         } else {
-          runningBalance += amount;
+          runningBalance -= amount; // Payment IN reduces what customer owes
         }
 
         sheetObject
@@ -737,7 +744,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
               excel.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row),
             )
             .value = excel.TextCellValue(
-          isCredit ? 'Payment In' : 'Payment Out',
+          // Payment IN = DEBIT (isCredit = false) → "Payment In"
+          // Payment OUT = CREDIT (isCredit = true) → "Payment Out"
+          isCredit ? 'Payment Out' : 'Payment In',
         );
         sheetObject
             .cell(
@@ -961,206 +970,210 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         initialChildSize: 0.5,
         minChildSize: 0.5,
         maxChildSize: 0.8,
-        builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: Colors.grey[50],
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[400],
-                  borderRadius: BorderRadius.circular(2),
+        builder: (context, scrollController) => SafeArea(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              // Header
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isLandscape ? 20 : 24,
-                  vertical: isLandscape ? 12 : 16,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: isLandscape ? 40 : 44,
-                      height: isLandscape ? 40 : 44,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.person,
-                        color: Colors.white,
-                        size: isLandscape ? 20 : 22,
-                      ),
-                    ),
-                    SizedBox(width: isLandscape ? 12 : 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.customerName,
-                            style: TextStyle(
-                              fontSize: isLandscape ? 17 : 18,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.black87,
-                            ),
+                // Header
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isLandscape ? 20 : 24,
+                    vertical: isLandscape ? 12 : 16,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: isLandscape ? 40 : 44,
+                        height: isLandscape ? 40 : 44,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
                           ),
-                          Text(
-                            'Customer Details',
-                            style: TextStyle(
-                              fontSize: isLandscape ? 12 : 13,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Divider
-              Container(
-                height: 1,
-                margin: EdgeInsets.symmetric(horizontal: isLandscape ? 20 : 24),
-                color: Colors.grey[200],
-              ),
-              // Content
-              Expanded(
-                child: FutureBuilder<DocumentSnapshot>(
-                  future:
-                      _selectedShopCollection != null &&
-                          _selectedShopCollection!.isNotEmpty
-                      ? FirebaseFirestore.instance
-                            .collection(_selectedShopCollection!)
-                            .doc('customers')
-                            .collection('list')
-                            .doc(widget.customerId)
-                            .get()
-                      : Future.error('Shop collection not available'),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF4285F4),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      );
-                    }
-
-                    if (snapshot.hasError ||
-                        !snapshot.hasData ||
-                        !snapshot.data!.exists) {
-                      return Center(
+                        child: Icon(
+                          Icons.person,
+                          color: Colors.white,
+                          size: isLandscape ? 20 : 22,
+                        ),
+                      ),
+                      SizedBox(width: isLandscape ? 12 : 16),
+                      Expanded(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(
-                              Icons.error_outline,
-                              size: isLandscape ? 40 : 48,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 12),
                             Text(
-                              'Customer details not found',
+                              widget.customerName,
                               style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: isLandscape ? 14 : 16,
+                                fontSize: isLandscape ? 17 : 18,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            Text(
+                              'Customer Details',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 12 : 13,
                                 fontWeight: FontWeight.w500,
+                                color: Colors.grey[600],
                               ),
                             ),
                           ],
                         ),
-                      );
-                    }
-
-                    final data = snapshot.data!.data() as Map<String, dynamic>?;
-                    if (data == null) {
-                      return const Center(child: Text('No data available'));
-                    }
-
-                    // Format timestamps
-                    String formatTimestamp(dynamic timestamp) {
-                      if (timestamp == null) return 'Not available';
-                      if (timestamp is Timestamp) {
-                        final date = timestamp.toDate();
-                        return DateFormat('dd MMM yyyy, hh:mm a').format(date);
-                      }
-                      return timestamp.toString();
-                    }
-
-                    return SingleChildScrollView(
-                      controller: scrollController,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isLandscape ? 20 : 24,
-                        vertical: isLandscape ? 12 : 16,
                       ),
-                      child: Column(
-                        children: [
-                          _buildCompactDetailRow(
-                            'Mobile',
-                            data['mobile'] ?? 'Not provided',
-                            Icons.phone,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Type',
-                            data['customerType'] ?? 'Not specified',
-                            Icons.category,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Status',
-                            data['status'] ?? 'Active',
-                            Icons.info_outline,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Opening Amount',
-                            '₹${_formatAmount((data['openingAmount'] ?? 0).toDouble())}',
-                            Icons.account_balance_wallet,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Opening Date',
-                            data['openingDate'] ?? 'Not available',
-                            Icons.calendar_today,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Created By',
-                            data['createdBy'] ?? 'Unknown',
-                            Icons.person_add,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Created',
-                            formatTimestamp(data['createdAt']),
-                            Icons.access_time,
-                            isLandscape,
-                          ),
-                          _buildCompactDetailRow(
-                            'Last Transaction',
-                            formatTimestamp(data['lastTransaction']),
-                            Icons.receipt_long,
-                            isLandscape,
-                            isLast: true,
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                // Divider
+                Container(
+                  height: 1,
+                  margin: EdgeInsets.symmetric(horizontal: isLandscape ? 20 : 24),
+                  color: Colors.grey[200],
+                ),
+                // Content
+                Expanded(
+                  child: FutureBuilder<DocumentSnapshot>(
+                    future:
+                        _selectedShopCollection != null &&
+                            _selectedShopCollection!.isNotEmpty
+                        ? FirebaseFirestore.instance
+                              .collection(_selectedShopCollection!)
+                              .doc('customers')
+                              .collection('list')
+                              .doc(widget.customerId)
+                              .get()
+                        : Future.error('Shop collection not available'),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF4285F4),
+                          ),
+                        );
+                      }
+
+                      if (snapshot.hasError ||
+                          !snapshot.hasData ||
+                          !snapshot.data!.exists) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: isLandscape ? 40 : 48,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Customer details not found',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: isLandscape ? 14 : 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final data = snapshot.data!.data() as Map<String, dynamic>?;
+                      if (data == null) {
+                        return const Center(child: Text('No data available'));
+                      }
+
+                      // Format timestamps
+                      String formatTimestamp(dynamic timestamp) {
+                        if (timestamp == null) return 'Not available';
+                        if (timestamp is Timestamp) {
+                          final date = timestamp.toDate();
+                          return DateFormat('dd MMM yyyy, hh:mm a').format(date);
+                        }
+                        return timestamp.toString();
+                      }
+
+                      return SingleChildScrollView(
+                        controller: scrollController,
+                        padding: EdgeInsets.only(
+                          left: isLandscape ? 20 : 24,
+                          right: isLandscape ? 20 : 24,
+                          top: isLandscape ? 12 : 16,
+                          bottom: isLandscape ? 16 : 20, // ✅ Extra bottom padding
+                        ),
+                        child: Column(
+                          children: [
+                            _buildCompactDetailRow(
+                              'Mobile',
+                              data['mobile'] ?? 'Not provided',
+                              Icons.phone,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Type',
+                              data['customerType'] ?? 'Not specified',
+                              Icons.category,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Status',
+                              data['status'] ?? 'Active',
+                              Icons.info_outline,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Opening Amount',
+                              '₹${_formatAmount((data['openingAmount'] ?? 0).toDouble())}',
+                              Icons.account_balance_wallet,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Opening Date',
+                              data['openingDate'] ?? 'Not available',
+                              Icons.calendar_today,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Created By',
+                              data['createdBy'] ?? 'Unknown',
+                              Icons.person_add,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Created',
+                              formatTimestamp(data['createdAt']),
+                              Icons.access_time,
+                              isLandscape,
+                            ),
+                            _buildCompactDetailRow(
+                              'Last Transaction',
+                              formatTimestamp(data['lastTransaction']),
+                              Icons.receipt_long,
+                              isLandscape,
+                              isLast: true,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1233,35 +1246,34 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     String mobile,
     BuildContext context,
   ) {
+    final bool isPositive = balance >= 0;
+    final Color primaryColor =
+        isPositive ? (Colors.red[700]!) : Colors.green[700]!;
+
     return Container(
       width: double.infinity,
       margin: EdgeInsets.zero,
       padding: EdgeInsets.all(isLandscape ? 18 : 20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: balance >= 0
-              ? [Colors.red[50]!, Colors.red[100]!]
-              : [Colors.green[50]!, Colors.green[100]!],
-        ),
+        color: isPositive ? Colors.red[50] : Colors.green[50],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Balance',
+            'Outstanding Amount',
             style: TextStyle(
-              color: balance >= 0 ? Colors.red[900] : Colors.green[900],
-              fontSize: isLandscape ? 15 : 16,
+              fontSize: isLandscape ? 14 : 15,
               fontWeight: FontWeight.w600,
+              color: primaryColor,
             ),
           ),
           Text(
             '₹${_formatAmount(balance.abs())}',
             style: TextStyle(
-              color: balance >= 0 ? Colors.red[900] : Colors.green[900],
               fontSize: isLandscape ? 24 : 28,
               fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
+              color: primaryColor,
             ),
           ),
         ],
@@ -1306,13 +1318,21 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     );
   }
 
-  Widget _buildTransactionItem(Map<String, dynamic> data, bool isLandscape) {
+  Widget _buildTransactionItem(
+    Map<String, dynamic> data,
+    double startBalance,
+    bool isLandscape,
+  ) {
     final amount = (data['amount'] ?? 0).toDouble();
     final isCredit = data['isCredit'] ?? false;
     final description = data['description'] ?? 'No description';
     final createdAt = data['createdAt'] as Timestamp?;
 
-    final transactionColor = isCredit ? Colors.green[700] : Colors.red[700];
+    // Payment IN = DEBIT (isCredit = false) = GREEN (money coming in)
+    // Payment OUT = CREDIT (isCredit = true) = RED (money going out)
+    final transactionColor = isCredit ? Colors.red[700] : Colors.green[700];
+    final String typeLabel =
+        isCredit ? 'Credit to customer' : 'Received from customer';
 
     return Column(
       children: [
@@ -1328,13 +1348,17 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                 width: isLandscape ? 40 : 46,
                 height: isLandscape ? 40 : 46,
                 decoration: BoxDecoration(
+                  // Payment IN = DEBIT (isCredit = false) = GREEN
+                  // Payment OUT = CREDIT (isCredit = true) = RED
                   color: isCredit
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.red.withOpacity(0.1),
+                      ? Colors.red.withOpacity(0.1)
+                      : Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  isCredit ? Icons.south_west : Icons.north_east,
+                  // Payment IN (isCredit=false) = money coming in = arrow up
+                  // Payment OUT (isCredit=true) = money going out = arrow down
+                  isCredit ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
                   color: transactionColor,
                   size: isLandscape ? 20 : 22,
                 ),
@@ -1356,7 +1380,17 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    // Subtitle: Date & Time
+                    const SizedBox(height: 2),
+                    // Type label: Payment In / Out wording
+                    Text(
+                      typeLabel,
+                      style: TextStyle(
+                        color: transactionColor,
+                        fontSize: isLandscape ? 11 : 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    // Subtitle: Date & Time + balance before this transaction
                     if (createdAt != null) ...[
                       SizedBox(height: isLandscape ? 3 : 4),
                       Text(
@@ -1365,6 +1399,15 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                           color: Colors.grey[600],
                           fontWeight: FontWeight.w400,
                           fontSize: isLandscape ? 12 : 13,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Balance before: ₹${_formatAmount(startBalance)}',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: isLandscape ? 11 : 12,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ],
@@ -1393,6 +1436,28 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           color: Colors.grey[200],
         ),
       ],
+    );
+  }
+
+  /// 🔹 Show detailed balance summary (opening, totals, per-date balances)
+  Future<void> _showBalanceSummaryDialog() async {
+    if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shop information not available'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (pageContext) => BalanceDetailsScreen(
+          shopCollection: _selectedShopCollection!,
+          customerId: widget.customerId,
+                                        ),
+                                      ),
     );
   }
 
@@ -1429,7 +1494,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         actions: [
           FutureBuilder<Map<String, dynamic>>(
             future: _getCustomerData(),
-            builder: (context, snapshot) {
+                            builder: (context, snapshot) {
               final mobile = snapshot.data?['mobile'] ?? '';
 
               return IconButton(
@@ -1440,6 +1505,12 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                     : 'Phone number not available',
               );
             },
+          ),
+          IconButton(
+            icon: Icon(Icons.account_balance_wallet_outlined,
+                size: isLandscape ? 22 : 24),
+            tooltip: 'Balance details',
+            onPressed: _showBalanceSummaryDialog,
           ),
           SizedBox(width: isLandscape ? 12 : 8),
         ],
@@ -1524,17 +1595,28 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
 
                   final transactions = snapshot.data?.docs ?? [];
 
-                  // Calculate balance
+                  // Calculate balance and per-transaction starting balances
+                  // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE balance (subtract)
+                  // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE balance (add)
                   double balance = openingAmount;
-                  for (var doc in transactions.reversed) {
+
+                  // Build map of start balance per transaction (in chronological order)
+                  final List<QueryDocumentSnapshot> chronologicalTx =
+                      List<QueryDocumentSnapshot>.from(transactions.reversed);
+                  final Map<String, double> startBalanceById = {};
+
+                  for (final doc in chronologicalTx) {
                     final data = doc.data() as Map<String, dynamic>;
                     final amount = (data['amount'] ?? 0).toDouble();
                     final isCredit = data['isCredit'] ?? false;
 
+                    // Balance before applying this transaction
+                    startBalanceById[doc.id] = balance;
+
                     if (isCredit) {
-                      balance -= amount;
+                      balance += amount; // Payment OUT increases what customer owes
                     } else {
-                      balance += amount;
+                      balance -= amount; // Payment IN reduces what customer owes
                     }
                   }
 
@@ -1588,8 +1670,13 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                                     final doc = transactions[index];
                                     final data =
                                         doc.data() as Map<String, dynamic>;
+                                    final String docId = doc.id;
+                                    final startBalance =
+                                        startBalanceById[docId] ??
+                                            openingAmount;
                                     return _buildTransactionItem(
                                       data,
+                                      startBalance,
                                       isLandscape,
                                     );
                                   },
@@ -1606,17 +1693,15 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       ),
       // 🔹 Floating Action Button with Loading State
       floatingActionButton: StreamBuilder<QuerySnapshot>(
-        stream:
-            _selectedShopCollection != null &&
-                _selectedShopCollection!.isNotEmpty
+        stream: _selectedShopCollection != null && _selectedShopCollection!.isNotEmpty
             ? FirebaseFirestore.instance
-                  .collection(_selectedShopCollection!)
-                  .doc('customers')
-                  .collection('list')
-                  .doc(widget.customerId)
-                  .collection('transactions')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots()
+                .collection(_selectedShopCollection!)
+                .doc('customers')
+                .collection('list')
+                .doc(widget.customerId)
+                .collection('transactions')
+                .orderBy('createdAt', descending: true)
+                .snapshots()
             : Stream.empty(),
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
@@ -1625,22 +1710,18 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
             onPressed: _isDownloading ? null : () => _showDownloadDialog(docs),
             tooltip: 'Download Report',
             child: _isDownloading
-                ? SizedBox(
-                    width: isLandscape ? 18 : 20,
-                    height: isLandscape ? 18 : 20,
-                    child: const CircularProgressIndicator(
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : Icon(
-                    Icons.download,
-                    color: Colors.white,
-                    size: isLandscape ? 20 : 22,
-                  ),
+                : const Icon(Icons.download, color: Colors.white),
           );
         },
       ),
     );
   }
-}
+  }

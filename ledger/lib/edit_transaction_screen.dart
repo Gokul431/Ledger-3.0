@@ -174,26 +174,32 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
           .toDouble();
 
       // ✅ CORRECT BALANCE CALCULATION LOGIC
+      // Payment IN = DEBIT (isCredit = false) = subtracts from balance
+      // Payment OUT = CREDIT (isCredit = true) = adds to balance
       // Step 1: Remove the impact of the original transaction
       double adjustedBalance = currentClosingBalance;
 
       if (_originalIsCredit) {
-        adjustedBalance -= _originalAmount; // Remove old credit impact
+        // Original was Payment OUT (CREDIT) - it added to balance, so subtract it back
+        adjustedBalance -= _originalAmount;
       } else {
-        adjustedBalance += _originalAmount; // Remove old debit impact
+        // Original was Payment IN (DEBIT) - it subtracted from balance, so add it back
+        adjustedBalance += _originalAmount;
       }
 
       // Step 2: Add the impact of the new transaction
       if (newIsCredit) {
-        adjustedBalance += newAmount; // Add new credit impact
+        // New is Payment OUT (CREDIT) - adds to balance
+        adjustedBalance += newAmount;
       } else {
-        adjustedBalance -= newAmount; // Add new debit impact
+        // New is Payment IN (DEBIT) - subtracts from balance
+        adjustedBalance -= newAmount;
       }
 
       debugPrint('Balance Calculation:');
       debugPrint('Current Closing: $currentClosingBalance');
-      debugPrint('Original: ${_originalIsCredit ? "+" : "-"}$_originalAmount');
-      debugPrint('New: ${newIsCredit ? "+" : "-"}$newAmount');
+      debugPrint('Original: ${_originalIsCredit ? "Payment OUT (CREDIT, +)" : "Payment IN (DEBIT, -)"} ₹$_originalAmount');
+      debugPrint('New: ${newIsCredit ? "Payment OUT (CREDIT, +)" : "Payment IN (DEBIT, -)"} ₹$newAmount');
       debugPrint('Final Closing: $adjustedBalance');
 
       // Update ledger document in the batch
@@ -300,7 +306,9 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${_originalIsCredit ? "Payment In" : "Payment Out"}: ₹${_originalAmount.toStringAsFixed(2)}',
+                    // Payment IN = DEBIT (isCredit = false)
+                    // Payment OUT = CREDIT (isCredit = true)
+                    '${_originalIsCredit ? "Payment Out" : "Payment In"}: ₹${_originalAmount.toStringAsFixed(2)}',
                     style: TextStyle(color: Colors.grey[700], fontSize: 14),
                   ),
                 ],
@@ -400,73 +408,16 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
               children: [
                 Expanded(
                   child: GestureDetector(
-                    onTap: () => setState(() => _isCredit = true),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: _isCredit ? Colors.green[50] : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _isCredit
-                              ? Colors.green[700]!
-                              : Colors.grey[300]!,
-                          width: _isCredit ? 2 : 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.add_circle_outline,
-                            color: _isCredit
-                                ? Colors.green[700]
-                                : Colors.grey[600],
-                            size: 32,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Payment In',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: _isCredit
-                                  ? Colors.green[700]
-                                  : Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Money received',
-                            style: TextStyle(
-                              color: _isCredit
-                                  ? Colors.green[600]
-                                  : Colors.grey[500],
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: GestureDetector(
+                    // Payment IN = DEBIT (isCredit = false)
                     onTap: () => setState(() => _isCredit = false),
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
-                        color: !_isCredit ? Colors.red[50] : Colors.white,
+                        color: !_isCredit ? Colors.green[50] : Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: !_isCredit
-                              ? Colors.red[700]!
+                              ? Colors.green[700]!
                               : Colors.grey[300]!,
                           width: !_isCredit ? 2 : 1,
                         ),
@@ -481,8 +432,67 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                       child: Column(
                         children: [
                           Icon(
-                            Icons.remove_circle_outline,
+                            Icons.add_circle_outline,
                             color: !_isCredit
+                                ? Colors.green[700]
+                                : Colors.grey[600],
+                            size: 32,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Payment In',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: !_isCredit
+                                  ? Colors.green[700]
+                                  : Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Money received',
+                            style: TextStyle(
+                              color: !_isCredit
+                                  ? Colors.green[600]
+                                  : Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: GestureDetector(
+                    // Payment OUT = CREDIT (isCredit = true)
+                    onTap: () => setState(() => _isCredit = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: _isCredit ? Colors.red[50] : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _isCredit
+                              ? Colors.red[700]!
+                              : Colors.grey[300]!,
+                          width: _isCredit ? 2 : 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.remove_circle_outline,
+                            color: _isCredit
                                 ? Colors.red[700]
                                 : Colors.grey[600],
                             size: 32,
@@ -492,7 +502,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                             'Payment Out',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: !_isCredit
+                              color: _isCredit
                                   ? Colors.red[700]
                                   : Colors.grey[600],
                               fontSize: 14,
@@ -502,7 +512,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                           Text(
                             'Money paid',
                             style: TextStyle(
-                              color: !_isCredit
+                              color: _isCredit
                                   ? Colors.red[600]
                                   : Colors.grey[500],
                               fontSize: 12,

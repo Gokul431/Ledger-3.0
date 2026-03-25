@@ -190,6 +190,32 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
     await _loadPreviousLedgerData();
   }
 
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF4285F4),
+              onPrimary: Colors.white,
+              onSurface: Colors.black87,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   Future<void> _saveLedger() async {
     // Validation for admin
     if (_userRole == 'client') {
@@ -204,21 +230,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
       return;
     }
 
-    // Check if trying to create ledger for today only
-    final today = DateTime.now();
-    final selectedDate = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-    );
-    final todayDate = DateTime(today.year, today.month, today.day);
-
-    if (selectedDate.compareTo(todayDate) != 0) {
-      _showSnackBar('You can only create ledger for today', isError: true);
-      return;
-    }
-
-    final todayString = DateFormat('dd-MMM-yyyy').format(_selectedDate);
+    final selectedDateString = DateFormat('dd-MMM-yyyy').format(_selectedDate);
 
     setState(() => _isSaving = true);
 
@@ -232,16 +244,16 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
         return;
       }
 
-      // Check if ledger already exists for today
+      // Check if ledger already exists for selected date
       final existingLedger = await FirebaseFirestore.instance
           .collection(collection)
           .doc('ledgers')
           .collection('dates')
-          .doc(todayString)
+          .doc(selectedDateString)
           .get();
 
       if (existingLedger.exists) {
-        _showSnackBar('Ledger for today already exists', isError: true);
+        _showSnackBar('Ledger for $selectedDateString already exists', isError: true);
         setState(() => _isSaving = false);
         return;
       }
@@ -257,7 +269,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
       int openingBalance = _grandTotal;
 
       final ledgerData = {
-        'ledgerDate': todayString,
+        'ledgerDate': selectedDateString,
         'createdAt': FieldValue.serverTimestamp(),
         'createdBy': _userRole == 'client' ? 'Admin' : 'Employee',
         'openingBalance': openingBalance,
@@ -273,12 +285,12 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
           .collection(collection)
           .doc('ledgers')
           .collection('dates')
-          .doc(todayString)
+          .doc(selectedDateString)
           .set(ledgerData);
 
       if (mounted) {
         setState(() => _isSaving = false);
-        _showSuccessDialog(todayString);
+        _showSuccessDialog(selectedDateString);
       }
     } catch (e) {
       _showSnackBar('Error saving ledger: $e', isError: true);
@@ -498,9 +510,61 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Date Selection (for both admin and employee)
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Select Date *',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF4285F4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: _selectDate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF4285F4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            color: const Color(0xFF4285F4),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            DateFormat('dd-MMM-yyyy').format(_selectedDate),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.grey[600],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
                   // Admin: Shop Selection
                   if (_userRole == 'client') ...[
-                    const SizedBox(height: 16),
                     const Text(
                       'Select Shop *',
                       style: TextStyle(
@@ -590,7 +654,6 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
 
                   // Employee: Opening Balance Display
                   if (_userRole == 'employee') ...[
-                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(

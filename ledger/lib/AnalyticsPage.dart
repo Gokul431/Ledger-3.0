@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_file/open_file.dart';
+import 'package:share_plus/share_plus.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -24,11 +30,20 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   List<Map<String, dynamic>> _recentTransactions = [];
   List<Map<String, dynamic>> _dailyBalances = [];
   List<Map<String, dynamic>> _topCustomers = [];
+  
+  // Bills Data
+  List<Map<String, dynamic>> _allBills = [];
+  DateTime? _selectedStartDate;
+  DateTime? _selectedEndDate;
+  bool _isLoadingBills = false;
+  bool _hasMoreBills = true;
+  DocumentSnapshot? _lastBillDocument;
+  static const int _billsPerPage = 50;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadAvailableShops();
   }
 
@@ -50,7 +65,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       List<Map<String, String>> shops = [];
 
       for (var doc in snapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         final collectionName = data['collectionName'] ?? '';
 
         // ✅ Fetch shop name from the actual shop collection's Credentials document
@@ -110,6 +127,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         _loadTransactionAnalytics(),
         _loadRecentTransactions(),
         _loadDailyBalances(),
+        _loadBills(),
       ]);
     } catch (e) {
       debugPrint('Error loading analytics: $e');
@@ -141,7 +159,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       int closedLedgers = 0;
 
       for (var doc in datesSnapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         final closingBalance = (data['closingBalance'] ?? 0).toDouble();
         final openingBalance = (data['openingBalance'] ?? 0).toDouble();
         final status = data['status'] ?? '';
@@ -178,7 +198,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           'thisMonthBalance': thisMonthBalance,
           'avgDailyBalance': totalDays > 0
               ? totalClosingBalance / totalDays
-              : 0,
+              : 0.0,
           'profitLoss': totalClosingBalance - totalOpeningBalance,
           'openLedgers': openLedgers,
           'closedLedgers': closedLedgers,
@@ -205,7 +225,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       List<Map<String, dynamic>> customers = [];
 
       for (var doc in customerSnapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         final customerType = data['customerType'] ?? '';
         final openingAmount = (data['openingAmount'] ?? 0).toDouble();
         final customerName = data['customerName'] ?? 'Unknown';
@@ -239,7 +261,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           'totalOpeningAmount': totalOpeningAmount,
           'avgOpeningAmount': totalCustomers > 0
               ? totalOpeningAmount / totalCustomers
-              : 0,
+              : 0.0,
         };
         _topCustomers = customers.take(5).toList();
       });
@@ -274,7 +296,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       Map<String, int> transactionTypes = {};
 
       for (var doc in transactionSnapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         final amount = (data['amount'] ?? 0).toDouble();
         final isCredit = data['isCredit'] ?? false;
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -344,7 +368,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       List<Map<String, dynamic>> transactions = [];
 
       for (var doc in transactionSnapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         transactions.add({
           'id': doc.id,
           'amount': data['amount'] ?? 0,
@@ -378,7 +404,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       List<Map<String, dynamic>> balances = [];
 
       for (var doc in datesSnapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
         balances.add({
           'date': data['ledgerDate'] ?? doc.id,
           'opening': data['openingBalance'] ?? 0,
@@ -396,6 +424,111 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       });
     } catch (e) {
       debugPrint('Error loading daily balances: $e');
+    }
+  }
+
+  Future<void> _loadBills({bool loadMore = false}) async {
+    if (_selectedShopId == null) return;
+
+    // Reset if not loading more
+    if (!loadMore) {
+      setState(() {
+        _isLoadingBills = true;
+        _allBills = [];
+        _lastBillDocument = null;
+        _hasMoreBills = true;
+      });
+    } else {
+      setState(() => _isLoadingBills = true);
+    }
+
+    try {
+      Query query = FirebaseFirestore.instance
+          .collection(_selectedShopId!)
+          .doc('ledgers')
+          .collection('transactions')
+          .where('billPhotoUrl', isNotEqualTo: null)
+          .orderBy('createdAt', descending: true)
+          .limit(_billsPerPage);
+
+      // Apply pagination
+      if (loadMore && _lastBillDocument != null) {
+        query = query.startAfterDocument(_lastBillDocument!);
+      }
+
+      final snapshot = await query.get();
+
+      List<Map<String, dynamic>> newBills = [];
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null) continue;
+        
+        final billPhotoUrl = data['billPhotoUrl'] as String?;
+
+        if (billPhotoUrl != null && billPhotoUrl.isNotEmpty) {
+          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+
+          // Apply date filter in memory
+          bool shouldInclude = true;
+          if (_selectedStartDate != null && createdAt != null) {
+            if (createdAt.isBefore(DateTime(_selectedStartDate!.year,
+                _selectedStartDate!.month, _selectedStartDate!.day))) {
+              shouldInclude = false;
+            }
+          }
+          if (shouldInclude && _selectedEndDate != null && createdAt != null) {
+            if (createdAt.isAfter(DateTime(_selectedEndDate!.year,
+                _selectedEndDate!.month, _selectedEndDate!.day, 23, 59, 59))) {
+              shouldInclude = false;
+            }
+          }
+
+          if (shouldInclude) {
+            newBills.add({
+              'id': doc.id,
+              'billPhotoUrl': billPhotoUrl,
+              'amount': data['amount'] ?? 0,
+              'description': data['description'] ?? '',
+              'ledgerName': data['ledgerName'] ?? '',
+              'customerName': data['customerName'] ?? '',
+              'transactionType': data['transactionType'] ?? 'General',
+              'ledgerDate': data['ledgerDate'] ?? '',
+              'createdAt': createdAt,
+              'isCredit': data['isCredit'] ?? false,
+            });
+          }
+        }
+      }
+
+      // Update last document for pagination
+      if (snapshot.docs.isNotEmpty) {
+        _lastBillDocument = snapshot.docs.last;
+        _hasMoreBills = snapshot.docs.length == _billsPerPage;
+      } else {
+        _hasMoreBills = false;
+      }
+
+      setState(() {
+        if (loadMore) {
+          _allBills.addAll(newBills);
+        } else {
+          _allBills = newBills;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading bills: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading bills: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      setState(() => _isLoadingBills = false);
     }
   }
 
@@ -503,15 +636,15 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Current Balance',
-          value: _formatCurrency(_ledgerStats['currentBalance'] ?? 0),
+          value: _formatCurrency((_ledgerStats['currentBalance'] ?? 0).toDouble()),
           subtitle: 'Latest ledger balance',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Total Profit/Loss',
-          value: (_ledgerStats['profitLoss'] ?? 0) >= 0
-              ? '+${_formatCurrency(_ledgerStats['profitLoss'] ?? 0)}'
-              : '-${_formatCurrency((_ledgerStats['profitLoss'] ?? 0).abs())}',
+          value: ((_ledgerStats['profitLoss'] ?? 0) as num).toDouble() >= 0
+              ? '+${_formatCurrency(((_ledgerStats['profitLoss'] ?? 0) as num).toDouble())}'
+              : '-${_formatCurrency(((_ledgerStats['profitLoss'] ?? 0) as num).toDouble().abs())}',
           subtitle: 'Total closing - opening balance',
         ),
         const SizedBox(height: 8),
@@ -556,13 +689,13 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Total Opening Amounts',
-          value: _formatCurrency(_customerStats['totalOpeningAmount'] ?? 0),
+          value: _formatCurrency((_customerStats['totalOpeningAmount'] ?? 0).toDouble()),
           subtitle: 'Sum of all customer opening amounts',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Average Opening Amount',
-          value: _formatCurrency(_customerStats['avgOpeningAmount'] ?? 0),
+          value: _formatCurrency((_customerStats['avgOpeningAmount'] ?? 0).toDouble()),
           subtitle: 'Per customer average',
         ),
         if (_topCustomers.isNotEmpty) ...[
@@ -635,7 +768,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                     ),
                   ),
                   Text(
-                    _formatCurrency(customer['openingAmount']),
+                    _formatCurrency((customer['openingAmount'] as num).toDouble()),
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -663,22 +796,22 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       children: [
         _buildMetricCard(
           label: 'This Month Credits',
-          value: _formatCurrency(_transactionStats['monthCredit'] ?? 0),
+          value: _formatCurrency((_transactionStats['monthCredit'] ?? 0).toDouble()),
           subtitle:
               '${_transactionStats['monthTransactions'] ?? 0} transactions',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'This Month Debits',
-          value: _formatCurrency(_transactionStats['monthDebit'] ?? 0),
+          value: _formatCurrency((_transactionStats['monthDebit'] ?? 0).toDouble()),
           subtitle: 'Monthly outflows',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Monthly Net Flow',
-          value: (_transactionStats['monthNetFlow'] ?? 0) >= 0
-              ? '+${_formatCurrency(_transactionStats['monthNetFlow'] ?? 0)}'
-              : '-${_formatCurrency((_transactionStats['monthNetFlow'] ?? 0).abs())}',
+          value: ((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble() >= 0
+              ? '+${_formatCurrency(((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble())}'
+              : '-${_formatCurrency(((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble().abs())}',
           subtitle: 'This month performance',
         ),
         const SizedBox(height: 16),
@@ -719,17 +852,20 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
+                      // Payment IN = DEBIT (isCredit = false) = GREEN (money coming in)
+                      // Payment OUT = CREDIT (isCredit = true) = RED (money going out)
                       color: isCredit
-                          ? const Color(0xFF388E3C).withOpacity(0.1)
-                          : const Color(0xFFD32F2F).withOpacity(0.1),
+                          ? const Color(0xFFD32F2F).withOpacity(0.1)
+                          : const Color(0xFF388E3C).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
                       child: Icon(
-                        isCredit ? Icons.add : Icons.remove,
+                        // Payment IN (isCredit=false) = add icon, Payment OUT (isCredit=true) = remove icon
+                        isCredit ? Icons.remove : Icons.add,
                         color: isCredit
-                            ? const Color(0xFF388E3C)
-                            : const Color(0xFFD32F2F),
+                            ? const Color(0xFFD32F2F)
+                            : const Color(0xFF388E3C),
                         size: 18,
                       ),
                     ),
@@ -760,13 +896,16 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                     ),
                   ),
                   Text(
-                    '${isCredit ? '+' : '-'}${_formatCurrency(amount.toDouble())}',
+                    // Payment IN (isCredit=false) = +, Payment OUT (isCredit=true) = -
+                    '${isCredit ? '-' : '+'}${_formatCurrency(amount.toDouble())}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
+                      // Payment IN = DEBIT (isCredit = false) = GREEN
+                      // Payment OUT = CREDIT (isCredit = true) = RED
                       color: isCredit
-                          ? const Color(0xFF388E3C)
-                          : const Color(0xFFD32F2F),
+                          ? const Color(0xFFD32F2F)
+                          : const Color(0xFF388E3C),
                     ),
                   ),
                 ],
@@ -789,14 +928,14 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       children: [
         _buildMetricCard(
           label: 'Average Daily Balance',
-          value: _formatCurrency(_ledgerStats['avgDailyBalance'] ?? 0),
+          value: _formatCurrency((_ledgerStats['avgDailyBalance'] ?? 0).toDouble()),
           subtitle: 'Per day average closing balance',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'This Month Activity',
           value: '${_ledgerStats['thisMonthDays'] ?? 0} Days',
-          subtitle: _formatCurrency(_ledgerStats['thisMonthBalance'] ?? 0),
+          subtitle: _formatCurrency((_ledgerStats['thisMonthBalance'] ?? 0).toDouble()),
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
@@ -907,6 +1046,377 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     );
   }
 
+  Widget _buildBillsTab() {
+    return Column(
+      children: [
+        // Date Filter Section
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.filter_alt, size: 20, color: Color(0xFF1976D2)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Filter by Date',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_selectedStartDate != null || _selectedEndDate != null)
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _selectedStartDate = null;
+                          _selectedEndDate = null;
+                        });
+                        _loadBills();
+                      },
+                      icon: const Icon(Icons.clear, size: 16),
+                      label: const Text('Clear'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red[600],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedStartDate ?? DateTime.now(),
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            _selectedStartDate = date;
+                          });
+                          _loadBills();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Color(0xFF1976D2)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _selectedStartDate != null
+                                    ? DateFormat('dd-MMM-yyyy')
+                                        .format(_selectedStartDate!)
+                                    : 'Start Date',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _selectedStartDate != null
+                                      ? Colors.black87
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedEndDate ?? DateTime.now(),
+                          firstDate: _selectedStartDate ?? DateTime(2020),
+                          lastDate: DateTime.now(),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            _selectedEndDate = date;
+                          });
+                          _loadBills();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today,
+                                size: 18, color: Color(0xFF1976D2)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _selectedEndDate != null
+                                    ? DateFormat('dd-MMM-yyyy')
+                                        .format(_selectedEndDate!)
+                                    : 'End Date',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _selectedEndDate != null
+                                      ? Colors.black87
+                                      : Colors.grey[600],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Bills Grid
+        Expanded(
+          child: _isLoadingBills
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+                )
+              : _allBills.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.receipt_long,
+                              size: 64, color: Colors.grey[400]),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No bills found',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _selectedStartDate != null || _selectedEndDate != null
+                                ? 'Try adjusting your date filter'
+                                : 'Bills will appear here when transactions have photos',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[500],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  : NotificationListener<ScrollNotification>(
+                      onNotification: (ScrollNotification scrollInfo) {
+                        if (!_isLoadingBills &&
+                            _hasMoreBills &&
+                            scrollInfo.metrics.pixels >=
+                                scrollInfo.metrics.maxScrollExtent - 200) {
+                          // Load more when scrolled near bottom (200px threshold)
+                          _loadBills(loadMore: true);
+                        }
+                        return false;
+                      },
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.75,
+                        ),
+                        itemCount: _allBills.length + (_hasMoreBills ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          // Show loading indicator at the end if more bills available
+                          if (index == _allBills.length) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.0),
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF1976D2),
+                                ),
+                              ),
+                            );
+                          }
+                          final bill = _allBills[index];
+                          return _buildBillCard(bill);
+                        },
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBillCard(Map<String, dynamic> bill) {
+    final amount = (bill['amount'] ?? 0).toDouble();
+    final isCredit = bill['isCredit'] ?? false;
+    final createdAt = bill['createdAt'] as DateTime?;
+    final ledgerName = bill['ledgerName'] ?? 'Unknown';
+    final description = bill['description'] ?? '';
+
+    return InkWell(
+      onTap: () => _showBillViewer(bill),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Bill Image Preview
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(12),
+                  ),
+                  child: Image.network(
+                    bill['billPhotoUrl'] as String,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        color: Colors.grey[200],
+                        child: const Center(
+                          child: Icon(Icons.broken_image,
+                              size: 40, color: Colors.grey),
+                        ),
+                      );
+                    },
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        color: Colors.grey[100],
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            // Bill Info
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ledgerName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatCurrency(amount),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          // Payment IN = DEBIT (isCredit = false) = GREEN
+                          // Payment OUT = CREDIT (isCredit = true) = RED
+                          color: isCredit
+                              ? const Color(0xFFD32F2F)
+                              : const Color(0xFF388E3C),
+                        ),
+                      ),
+                      if (createdAt != null)
+                        Text(
+                          DateFormat('dd MMM').format(createdAt),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBillViewer(Map<String, dynamic> bill) {
+    final billPhotoUrl = bill['billPhotoUrl'] as String;
+    final ledgerName = bill['ledgerName'] ?? 'Unknown';
+    final amount = (bill['amount'] ?? 0).toDouble();
+    final createdAt = bill['createdAt'] as DateTime?;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _BillViewerBottomSheet(
+        billPhotoUrl: billPhotoUrl,
+        transactionTitle: ledgerName,
+        amount: amount,
+        createdAt: createdAt,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -970,6 +1480,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   padding: EdgeInsets.symmetric(horizontal: 12),
                   child: Tab(text: 'PERFORMANCE'),
                 ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Tab(text: 'BILLS'),
+                ),
               ],
             ),
           ),
@@ -982,7 +1496,289 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           _buildCustomersTab(),
           _buildTransactionsTab(),
           _buildPerformanceTab(),
+          _buildBillsTab(),
         ],
+      ),
+    );
+  }
+}
+
+// Bill Viewer Bottom Sheet
+class _BillViewerBottomSheet extends StatefulWidget {
+  final String billPhotoUrl;
+  final String transactionTitle;
+  final double amount;
+  final DateTime? createdAt;
+
+  const _BillViewerBottomSheet({
+    required this.billPhotoUrl,
+    required this.transactionTitle,
+    required this.amount,
+    this.createdAt,
+  });
+
+  @override
+  State<_BillViewerBottomSheet> createState() => _BillViewerBottomSheetState();
+}
+
+class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
+  final TransformationController _transformationController =
+      TransformationController();
+  bool _isDownloading = false;
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _downloadBill() async {
+    setState(() => _isDownloading = true);
+
+    try {
+      final response = await http.get(Uri.parse(widget.billPhotoUrl));
+      if (response.statusCode == 200) {
+        final Uint8List imageBytes = response.bodyBytes;
+
+        final directory = await getApplicationDocumentsDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName =
+            'bill_${widget.transactionTitle.replaceAll(' ', '_')}_$timestamp.jpg';
+        final filePath = '${directory.path}/$fileName';
+
+        final file = File(filePath);
+        await file.writeAsBytes(imageBytes);
+
+        setState(() => _isDownloading = false);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Bill downloaded to $fileName'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          await OpenFile.open(filePath);
+        }
+      } else {
+        throw Exception('Failed to download image');
+      }
+    } catch (e) {
+      setState(() => _isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error downloading bill: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareBill() async {
+    setState(() => _isDownloading = true);
+
+    try {
+      final response = await http.get(Uri.parse(widget.billPhotoUrl));
+      if (response.statusCode == 200) {
+        final Uint8List imageBytes = response.bodyBytes;
+
+        final directory = await getTemporaryDirectory();
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final fileName = 'bill_$timestamp.jpg';
+        final filePath = '${directory.path}/$fileName';
+
+        final file = File(filePath);
+        await file.writeAsBytes(imageBytes);
+
+        setState(() => _isDownloading = false);
+
+        if (mounted) {
+          await Share.shareXFiles(
+            [XFile(filePath)],
+            text: 'Bill for ${widget.transactionTitle}',
+          );
+        }
+      } else {
+        throw Exception('Failed to download image');
+      }
+    } catch (e) {
+      setState(() => _isDownloading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing bill: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.transactionTitle,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (widget.createdAt != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            DateFormat('dd MMM yyyy, hh:mm a')
+                                .format(widget.createdAt!),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            // Image Viewer
+            Expanded(
+              child: InteractiveViewer(
+                transformationController: _transformationController,
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Center(
+                  child: Image.network(
+                    widget.billPhotoUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.broken_image,
+                                size: 64, color: Colors.white54),
+                            SizedBox(height: 16),
+                            Text(
+                              'Failed to load image',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            // Action Buttons
+            SafeArea(
+              top: false,
+              child: Container(
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom: 16 + MediaQuery.of(context).padding.bottom,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  border: Border(
+                    top: BorderSide(color: Colors.grey[800]!, width: 1),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isDownloading ? null : _downloadBill,
+                        icon: _isDownloading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Icon(Icons.download, size: 18),
+                        label: const Text('Download'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1976D2),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isDownloading ? null : _shareBill,
+                        icon: const Icon(Icons.share, size: 18),
+                        label: const Text('Share'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[800],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
