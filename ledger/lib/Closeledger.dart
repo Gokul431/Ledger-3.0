@@ -135,6 +135,11 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
       _ledgerClosed =
           (data?['status'] ?? '').toString().toLowerCase() == 'closed';
 
+      // Always pre-fill saleValue from Firestore (set by stock close)
+      final sv = data?['saleValue'];
+      final saleValueNum = sv is int ? sv.toDouble() : (sv is double ? sv : 0.0);
+      _salesController.text = saleValueNum > 0 ? saleValueNum.toStringAsFixed(2) : '';
+
       if (_ledgerClosed) {
         final denominationsMap = Map<String, dynamic>.from(
           data?['denominations'] ?? {},
@@ -152,15 +157,14 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
           _controllers[i].text = count.toString();
           _denominationTotals[i] = count * denominations[i];
         }
-        
-        _salesController.text = (data?['saleValue'] ?? 0).toString();
+
         _cashOutController.text = (data?['cashOut'] ?? 0).toString();
 
         // Auto-enter edit mode if requested (only on initial load)
         if (widget.startInEditMode && _isInitialLoad) {
           _isEditMode = true;
         }
-        
+
         // Mark that initial load is complete
         _isInitialLoad = false;
       } else {

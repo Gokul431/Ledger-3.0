@@ -12,6 +12,7 @@ import 'LoginScreen.dart';
 import 'EmployeesPage.dart';
 import 'ChangeCredentialsPage.dart';
 import 'ledgerlist.dart';
+import 'ItemsPage.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -493,6 +494,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Divider(height: 1, thickness: 1, color: Colors.grey[200]),
                   ],
 
+                  // Manage Items - Only for ADMIN
+                  if (_isClientLogin) ...[
+                    _buildSettingsItem(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Manage Items',
+                      subtitle: 'Add or edit stock items and prices',
+                      hasTrailingArrow: true,
+                      iconColor: Colors.teal,
+                      isLandscape: isLandscape,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ItemsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    Divider(height: 1, thickness: 1, color: Colors.grey[200]),
+                  ],
+
                   // Change Credentials - Only for ADMIN
                   if (_isClientLogin) ...[
                     _buildSettingsItem(
@@ -593,7 +615,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Version 2.1.0',
+                          'Version 2.2.0',
                           style: TextStyle(
                             fontSize: isLandscape ? 13 : 14,
                             fontWeight: FontWeight.w500,
@@ -602,7 +624,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Build 2025.02',
+                          'Build 2026.04',
                           style: TextStyle(
                             fontSize: isLandscape ? 11 : 12,
                             color: Colors.grey[500],

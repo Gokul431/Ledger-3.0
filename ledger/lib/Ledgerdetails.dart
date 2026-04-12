@@ -17,6 +17,7 @@ import 'Closeledger.dart';
 import 'Createtransaction.dart';
 
 import 'edit_transaction_screen.dart'; // ✅ Import the new edit screen
+import 'StockTab.dart';
 
 import 'pdf_export_service.dart';
 import 'excel_export_service.dart';
@@ -38,7 +39,8 @@ class LedgerDetailsScreen extends StatefulWidget {
 }
 
 class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
+  late TabController _tabController;
   // Shop related
   String? _userRole;
   String? _selectedShopCollection;
@@ -56,12 +58,14 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addObserver(this);
     _initializeAndLoadLedger();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1962,6 +1966,19 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             ),
           ],
         ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700, fontSize: 14),
+          tabs: const [
+            Tab(icon: Icon(Icons.book_outlined, size: 18), text: 'Ledger'),
+            Tab(icon: Icon(Icons.inventory_2_outlined, size: 18), text: 'Stock'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.lock_outline, size: isLandscape ? 22 : 24),
@@ -1997,33 +2014,35 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       ),
       body: Column(
         children: [
-          if (_isLedgerClosed)
-            Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(isLandscape ? 10 : 12),
-              color: Colors.red[700],
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.lock,
-                    color: Colors.white,
-                    size: isLandscape ? 18 : 20,
-                  ),
-                  SizedBox(width: isLandscape ? 6 : 8),
-                  Text(
-                    'LEDGER CLOSED',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: isLandscape ? 14 : 16,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          _isLoading
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // ── Tab 1: Ledger ──
+                Column(
+                  children: [
+                    if (_isLedgerClosed)
+                      Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(isLandscape ? 10 : 12),
+                        color: Colors.red[700],
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.lock, color: Colors.white,
+                                size: isLandscape ? 18 : 20),
+                            SizedBox(width: isLandscape ? 6 : 8),
+                            Text('LEDGER CLOSED',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: isLandscape ? 14 : 16,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.8,
+                                )),
+                          ],
+                        ),
+                      ),
+                    _isLoading
               ? Container(
                   margin: EdgeInsets.zero,
                   padding: EdgeInsets.symmetric(
@@ -2187,32 +2206,56 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         ),
                       );
                     },
-                  ),
-          ),
+                  ),    // closes StreamBuilder
+                  ),    // closes Expanded(child: ...)
+                  ],   // end Ledger tab Column children
+                ),     // end Ledger tab Column
+
+                // ── Tab 2: Stock ──
+                (_selectedShopCollection == null)
+                    ? const Center(child: CircularProgressIndicator())
+                    : StockTab(
+                        shopCollection: _selectedShopCollection!,
+                        date: widget.date,
+                        isLedgerClosed: _isLedgerClosed,
+                        isEmployeeLogin: _isEmployeeLogin,
+                        ledgerRef: _ledgerRef,
+                      ),
+              ],        // end TabBarView children
+            ),          // end TabBarView
+          ),            // end Expanded
         ],
       ),
-      floatingActionButton: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _getTransactionsStream(),
-        builder: (context, snapshot) {
-          final docs = snapshot.data?.docs ?? [];
-          return FloatingActionButton(
-            backgroundColor: const Color(0xFF4285F4),
-            onPressed: _isDownloading ? null : () => _showDownloadDialog(docs),
-            tooltip: 'Download Report',
-            child: _isDownloading
-                ? SizedBox(
-                    width: isLandscape ? 18 : 20,
-                    height: isLandscape ? 18 : 20,
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Icon(
-                    Icons.download,
-                    color: Colors.white,
-                    size: isLandscape ? 20 : 22,
-                  ),
+      floatingActionButton: ListenableBuilder(
+        listenable: _tabController,
+        builder: (context, _) {
+          if (_tabController.index == 1) return const SizedBox.shrink();
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _getTransactionsStream(),
+            builder: (context, snapshot) {
+              final docs = snapshot.data?.docs ?? [];
+              return FloatingActionButton(
+                backgroundColor: const Color(0xFF4285F4),
+                onPressed:
+                    _isDownloading ? null : () => _showDownloadDialog(docs),
+                tooltip: 'Download Report',
+                child: _isDownloading
+                    ? SizedBox(
+                        width: isLandscape ? 18 : 20,
+                        height: isLandscape ? 18 : 20,
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Icon(
+                        Icons.download,
+                        color: Colors.white,
+                        size: isLandscape ? 20 : 22,
+                      ),
+              );
+            },
           );
         },
       ),
