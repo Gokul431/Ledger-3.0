@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AddCustomer extends StatefulWidget {
-  const AddCustomer({Key? key}) : super(key: key);
+  const AddCustomer({super.key});
 
   @override
   State<AddCustomer> createState() => _AddCustomerState();

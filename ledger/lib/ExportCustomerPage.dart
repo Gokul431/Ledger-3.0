@@ -315,7 +315,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
 
     // CSV Content
     final csvContent = StringBuffer();
-    csvContent.writeln('$reportType');
+    csvContent.writeln(reportType);
     csvContent.writeln('Period: $dateRange');
     csvContent.writeln('Customer: ${_selectedCustomer ?? "All Customers"}');
     csvContent.writeln(
@@ -802,7 +802,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                 border: Border.all(color: Colors.grey[300]!),
               ),
               child: DropdownButtonFormField<String>(
-                value: _selectedCustomer,
+                initialValue: _selectedCustomer,
                 decoration: const InputDecoration(
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(

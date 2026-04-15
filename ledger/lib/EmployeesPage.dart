@@ -415,7 +415,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
           'brand': 'Apple',
           'manufacturer': 'Apple',
           'platform': 'iOS',
-          'version': '${iosInfo.systemVersion}',
+          'version': iosInfo.systemVersion,
         };
       }
       return {};
@@ -644,7 +644,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
 
       // Create Firebase Auth user for employee
       // Use email format: username@shopname.ledger.local
-      final email = '${empUsername}@${collectionName}.ledger.local';
+      final email = '$empUsername@$collectionName.ledger.local';
       UserCredential? userCredential;
       
       try {
@@ -676,7 +676,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
 
       // Get Firebase Auth UID if available
       final authUid = userCredential?.user?.uid ?? 
-                      (await FirebaseAuth.instance.currentUser)?.uid;
+                      (FirebaseAuth.instance.currentUser)?.uid;
 
       await FirebaseFirestore.instance
           .collection(collectionName)
@@ -1277,7 +1277,7 @@ class _EditShopPageState extends State<EditShopPage> {
           'brand': 'Apple',
           'manufacturer': 'Apple',
           'platform': 'iOS',
-          'version': '${iosInfo.systemVersion}',
+          'version': iosInfo.systemVersion,
         };
       }
       return {};

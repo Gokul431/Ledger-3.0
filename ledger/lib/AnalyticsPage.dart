@@ -590,7 +590,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         Padding(
           padding: const EdgeInsets.all(16),
           child: DropdownButtonFormField<String>(
-            value: _selectedShopId,
+            initialValue: _selectedShopId,
             isExpanded: true,
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(
@@ -778,7 +778,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
         const SizedBox(height: 16),
       ],
@@ -911,7 +911,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 ],
               ),
             );
-          }).toList(),
+          }),
         const SizedBox(height: 16),
       ],
     );
@@ -1040,7 +1040,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 ],
               ),
             );
-          }).toList(),
+          }),
         const SizedBox(height: 16),
       ],
     );

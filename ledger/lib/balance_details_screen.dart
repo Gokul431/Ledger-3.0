@@ -78,7 +78,7 @@ class BalanceDetailsScreen extends StatelessWidget {
           final List<Map<String, dynamic>> rows = [];
 
           for (final doc in txSnapshot.docs) {
-            final data = doc.data() as Map<String, dynamic>;
+            final data = doc.data();
             final amount = (data['amount'] ?? 0).toDouble();
             final isCredit = data['isCredit'] == true;
             final createdAt = data['createdAt'] as Timestamp?;

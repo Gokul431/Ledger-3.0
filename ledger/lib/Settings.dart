@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'widgets/AppBottomBar.dart';
 import 'SubmitFeedbackPage.dart';
 import 'BackupDataPage.dart';
@@ -11,7 +10,6 @@ import 'AnalyticsPage.dart';
 import 'LoginScreen.dart';
 import 'EmployeesPage.dart';
 import 'ChangeCredentialsPage.dart';
-import 'ledgerlist.dart';
 import 'ItemsPage.dart';
 
 class SettingsScreen extends StatefulWidget {

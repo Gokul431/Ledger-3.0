@@ -420,33 +420,71 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
   }
 
   /// Show snackbar
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+  void _showSnackBar(dynamic error, {bool isError = false}) {
+    String message = error.toString();
+    String title = isError ? 'Error' : 'Success';
+    IconData icon = isError ? Icons.error_outline : Icons.check_circle_outline;
+    
+    if (isError) {
+      // Specially handle network/connectivity errors
+      if (message.contains('UNAVAILABLE') || 
+          message.contains('UnknownHostException') || 
+          message.contains('Network error')) {
+        title = 'Network Error';
+        message = 'Unable to reach Firebase. Please check your internet connection.';
+        icon = Icons.wifi_off_rounded;
+      } else if (message.contains('permission-denied')) {
+        title = 'Access Denied';
+        message = 'Permissions issue. Please contact administrator.';
+        icon = Icons.lock_person_rounded;
+      } else if (message.contains('invalid-credential')) {
+        title = 'Invalid Credentials';
+        message = 'The username or password provided is incorrect.';
+        icon = Icons.password_rounded;
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
+          backgroundColor: isError ? Colors.red[600] : Colors.green[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 4),
         ),
-        backgroundColor: isError ? Colors.red[600] : Colors.green[600],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    }
   }
 
   @override

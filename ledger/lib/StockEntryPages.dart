@@ -162,7 +162,7 @@ class _StockInPageState extends State<StockInPage> {
                           color: Color(0xFF1565C0), width: 4)),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
+                        color: Colors.black.withOpacity(0.05),
                         blurRadius: 8,
                         offset: const Offset(0, 2)),
                   ],
@@ -393,7 +393,7 @@ class _StockOutPageState extends State<StockOutPage> {
                           : Border.all(color: Colors.transparent),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
+                            color: Colors.black.withOpacity(0.05),
                             blurRadius: 6,
                             offset: const Offset(0, 1)),
                       ],
@@ -464,7 +464,7 @@ class _StockOutPageState extends State<StockOutPage> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
+                            color: Colors.black.withOpacity(0.05),
                             blurRadius: 8,
                             offset: const Offset(0, 2)),
                       ],
@@ -569,7 +569,7 @@ class _InfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -645,7 +645,7 @@ class _CounterButton extends StatelessWidget {
         height: 34,
         decoration: BoxDecoration(
           color: enabled
-              ? const Color(0xFF1565C0).withValues(alpha: 0.08)
+              ? const Color(0xFF1565C0).withOpacity(0.08)
               : Colors.grey[100],
           borderRadius: BorderRadius.circular(8),
         ),

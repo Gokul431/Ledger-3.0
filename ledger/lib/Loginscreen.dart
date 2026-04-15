@@ -54,6 +54,76 @@ class _LoginScreenState extends State<LoginScreen>
     _setupAnimations();
   }
 
+  Future<void> _runConnectivityDiagnostics() async {
+    setState(() => _isLoading = true);
+    List<String> results = [];
+    
+    try {
+      results.add('🔍 Starting Connectivity Diagnostics...');
+      
+      // 1. Check general internet (Google DNS)
+      try {
+        final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 5));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          results.add('✅ Google.com: REACHABLE');
+        }
+      } catch (e) {
+        results.add('❌ Google.com: UNREACHABLE ($e)');
+      }
+      
+      // 2. Check Firestore Host
+      try {
+        final result = await InternetAddress.lookup('firestore.googleapis.com').timeout(const Duration(seconds: 5));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          results.add('✅ Firestore Host: REACHABLE');
+        }
+      } catch (e) {
+        results.add('❌ Firestore Host: UNREACHABLE (DNS Failure)');
+      }
+
+      // 3. Check Firebase Auth Host
+      try {
+        final result = await InternetAddress.lookup('www.googleapis.com').timeout(const Duration(seconds: 5));
+        if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
+          results.add('✅ Google APIs: REACHABLE');
+        }
+      } catch (e) {
+        results.add('❌ Google APIs: UNREACHABLE');
+      }
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Network Diagnostics'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: results.map((r) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(r, style: TextStyle(
+                  fontSize: 13,
+                  color: r.contains('❌') ? Colors.red : (r.contains('✅') ? Colors.green : Colors.black87),
+                  fontWeight: r.contains('Starting') ? FontWeight.bold : FontWeight.normal,
+                )),
+              )).toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _fadeController.dispose();
@@ -311,66 +381,36 @@ class _LoginScreenState extends State<LoginScreen>
   Future<Map<String, dynamic>?> _verifyPhoneNumberInAdminLogin(
       String phoneNumber) async {
     try {
-      // Normalize phone number (remove +, spaces, etc.)
+      // Normalize input phone number (remove +, spaces, etc. and get last 10 digits)
       String normalizedPhone = phoneNumber.replaceAll(RegExp(r'[+\s-]'), '');
-      
-      // Remove leading + if present
-      if (normalizedPhone.startsWith('+')) {
-        normalizedPhone = normalizedPhone.substring(1);
+      if (normalizedPhone.length > 10) {
+        normalizedPhone = normalizedPhone.substring(normalizedPhone.length - 10);
       }
       
-      debugPrint('🔍 Searching for phone number: $normalizedPhone');
+      debugPrint('🔍 Searching for phone number (last 10 digits): $normalizedPhone');
       
-      // Get all adminlogin documents (since we can't query by phoneNumber if field doesn't exist)
-      final snapshot = await FirebaseFirestore.instance
+      // Attempt direct query (exact match or various formats)
+      // Note: This assumes stored numbers might have +91, 91, or just 10 digits
+      final querySnapshot = await FirebaseFirestore.instance
           .collection('adminlogin')
           .get();
 
-      debugPrint('📋 Found ${snapshot.docs.length} adminlogin document(s)');
-
-      // Check each document for phone number match
-      for (var doc in snapshot.docs) {
+      // Since phone numbers can be stored in various formats (+91..., 91..., or 10 digits),
+      // and Firestore doesn't support regex/substring queries, we still check locally 
+      // but we could optimize by only fetching once or using a better indexing strategy.
+      // FOR NOW: We keep the fetch but optimize the comparison logic and add logging.
+      
+      for (var doc in querySnapshot.docs) {
         final data = doc.data();
-        final docPhone = data['phoneNumber']?.toString() ?? '';
-        final docUsername = data['username']?.toString() ?? '';
+        final docPhone = data['phoneNumber']?.toString().replaceAll(RegExp(r'[+\s-]'), '') ?? '';
         
-        debugPrint('📄 Checking document: username=$docUsername, phoneNumber=$docPhone');
+        if (docPhone.isEmpty) continue;
         
-        if (docPhone.isEmpty) {
-          debugPrint('⚠️ Document has no phoneNumber field');
-          continue;
-        }
-        
-        // Normalize document phone number
-        String normalizedDocPhone = docPhone.replaceAll(RegExp(r'[+\s-]'), '');
-        if (normalizedDocPhone.startsWith('+')) {
-          normalizedDocPhone = normalizedDocPhone.substring(1);
-        }
-        
-        debugPrint('🔍 Comparing: input=$normalizedPhone vs stored=$normalizedDocPhone');
-        
-        // Try exact match
-        if (normalizedDocPhone == normalizedPhone) {
-          debugPrint('✅ Exact match found!');
-          return data;
-        }
-        
-        // Try with country code variations (for Indian numbers)
-        if (normalizedPhone.length == 10 && normalizedDocPhone == '91$normalizedPhone') {
-          debugPrint('✅ Match found with country code!');
-          return data;
-        }
-        if (normalizedDocPhone.length == 10 && normalizedPhone == '91$normalizedDocPhone') {
-          debugPrint('✅ Match found (input had country code)!');
-          return data;
-        }
-        
-        // Try last 10 digits match (in case of different formats)
-        if (normalizedPhone.length >= 10 && normalizedDocPhone.length >= 10) {
-          final last10Input = normalizedPhone.substring(normalizedPhone.length - 10);
-          final last10Doc = normalizedDocPhone.substring(normalizedDocPhone.length - 10);
-          if (last10Input == last10Doc) {
-            debugPrint('✅ Match found (last 10 digits)!');
+        // Compare last 10 digits
+        if (docPhone.length >= 10) {
+          final last10Doc = docPhone.substring(docPhone.length - 10);
+          if (last10Doc == normalizedPhone) {
+            debugPrint('✅ Match found for user: ${data['username']}');
             return data;
           }
         }
@@ -380,7 +420,7 @@ class _LoginScreenState extends State<LoginScreen>
       return null;
     } catch (e) {
       debugPrint('❌ Error verifying phone number: $e');
-      return null;
+      rethrow; // Let the caller handle the specific network error
     }
   }
 
@@ -784,21 +824,58 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  void _showErrorSnackBar(String message) {
+  void _showErrorSnackBar(dynamic error) {
+    String message = error.toString();
+    String title = 'Login Failed';
+    IconData icon = Icons.error_outline;
+    
+    // Specially handle network/connectivity errors
+    if (message.contains('UNAVAILABLE') || 
+        message.contains('UnknownHostException') || 
+        message.contains('Network error')) {
+      title = 'Network Error';
+      message = 'Unable to reach Firebase. Please check your internet connection or emulator network settings.';
+      icon = Icons.wifi_off_rounded;
+    } else if (message.contains('permission-denied')) {
+      title = 'Access Denied';
+      message = 'You do not have permission to access these records. Please contact the administrator.';
+      icon = Icons.lock_person_rounded;
+    } else if (message.contains('invalid-credential')) {
+      title = 'Invalid Credentials';
+      message = 'The username or password provided is incorrect.';
+      icon = Icons.password_rounded;
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              Icon(Icons.error_outline, color: Colors.white),
+              Icon(icon, color: Colors.white),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.white,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -808,7 +885,7 @@ class _LoginScreenState extends State<LoginScreen>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -1071,14 +1148,24 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
           const SizedBox(height: 28),
-          const Text(
-            'Admin Login',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1F2937),
-              letterSpacing: 0.3,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Admin Login',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
+                  letterSpacing: 0.3,
+                ),
+              ),
+              IconButton(
+                onPressed: _runConnectivityDiagnostics,
+                icon: Icon(Icons.info_outline, color: Colors.grey[400], size: 20),
+                tooltip: 'Network Diagnostics',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(

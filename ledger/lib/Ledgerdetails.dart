@@ -1946,22 +1946,25 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         elevation: 0,
         backgroundColor: const Color(0xFF4285F4),
         foregroundColor: Colors.white,
+        centerTitle: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Ledger Details',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w900,
                 fontSize: isLandscape ? 20 : 22,
+                letterSpacing: -0.5,
               ),
             ),
+            const SizedBox(height: 2),
             Text(
               'As of Date: $ledgerDate',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: Colors.white70,
-                fontWeight: FontWeight.w400,
+                color: Colors.white.withOpacity(0.8),
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -1969,19 +1972,35 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
-          indicatorWeight: 3,
+          indicatorWeight: 4,
+          indicatorSize: TabBarIndicatorSize.tab,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
+          unselectedLabelColor: Colors.white.withOpacity(0.6),
           labelStyle: const TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 14),
+            fontWeight: FontWeight.w800, 
+            fontSize: 13,
+            letterSpacing: 0.5,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w600, 
+            fontSize: 13,
+          ),
           tabs: const [
-            Tab(icon: Icon(Icons.book_outlined, size: 18), text: 'Ledger'),
-            Tab(icon: Icon(Icons.inventory_2_outlined, size: 18), text: 'Stock'),
+            Tab(
+              icon: Icon(Icons.menu_book_rounded, size: 20), 
+              text: 'Ledger',
+              iconMargin: EdgeInsets.only(bottom: 6),
+            ),
+            Tab(
+              icon: Icon(Icons.inventory_2_rounded, size: 20), 
+              text: 'Stock',
+              iconMargin: EdgeInsets.only(bottom: 6),
+            ),
           ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.lock_outline, size: isLandscape ? 22 : 24),
+            icon: Icon(Icons.lock_outline_rounded, size: isLandscape ? 22 : 24, color: Colors.white),
             tooltip: "Close Ledger",
             onPressed: () {
               Navigator.push(
@@ -2000,16 +2019,13 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             },
           ),
           IconButton(
-            icon: Icon(Icons.add_circle_outline, size: isLandscape ? 24 : 26),
+            icon: Icon(Icons.add_circle_outline_rounded, size: isLandscape ? 24 : 26, color: Colors.white),
             tooltip: (_isLedgerClosed && _isEmployeeLogin)
                 ? "Cannot add - Ledger is closed"
                 : "Add Transaction",
             onPressed: _ledgerRef == null ? null : _handleAddTransaction,
-            color: (_isLedgerClosed && _isEmployeeLogin)
-                ? Colors.white.withOpacity(0.4)
-                : Colors.white,
           ),
-          SizedBox(width: isLandscape ? 12 : 8),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(

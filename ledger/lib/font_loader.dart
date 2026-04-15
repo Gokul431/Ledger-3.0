@@ -3,7 +3,6 @@
 import 'package:flutter/services.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/foundation.dart'; // ← This import fixes debugPrint
-import 'dart:typed_data';
 
 class TamilFontLoader {
   static pw.Font? tamilRegular;

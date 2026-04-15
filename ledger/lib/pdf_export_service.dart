@@ -1,7 +1,6 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
-import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -191,7 +190,7 @@ class PDFExportService {
           'debit': !isCredit ? amount : 0.0,
           'credit': isCredit ? amount : 0.0,
         };
-      }).toList(),
+      }),
     ];
 
     // ✅ Calculate totals (including opening balance)
@@ -402,7 +401,7 @@ class PDFExportService {
                         pw.Container(
                           padding: const pw.EdgeInsets.all(6),
                           child: pw.Text(
-                            time.isNotEmpty ? '${txDate} | $time' : txDate,
+                            time.isNotEmpty ? '$txDate | $time' : txDate,
                             style: pw.TextStyle(
                               fontSize: 8,
                               fontWeight:
@@ -497,7 +496,7 @@ class PDFExportService {
                               ),
                       ],
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
 

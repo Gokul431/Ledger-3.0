@@ -373,7 +373,7 @@ class _StockTabState extends State<StockTab> {
                     DateFormat('dd MMM').format(widget.date),
                     style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withValues(alpha: 0.8)),
+                        color: Colors.white.withOpacity(0.8)),
                   ),
                 ],
               ),
@@ -644,21 +644,20 @@ class _StockTabState extends State<StockTab> {
         if (_isStockClosed)
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(
-                vertical: 10, horizontal: 16),
-            color: Colors.orange[700],
+            padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 16),
+            color: const Color(0xFFE67E22), // More saturated orange
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.lock, color: Colors.white, size: 18),
-                SizedBox(width: 8),
+                Icon(Icons.lock, color: Colors.white, size: 16),
+                SizedBox(width: 10),
                 Text(
                   'STOCK CLOSED',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ],
@@ -669,16 +668,13 @@ class _StockTabState extends State<StockTab> {
         Expanded(
           child: ListView.separated(
             physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              14,
-              14,
-              14,
-              (_isStockClosed || widget.isLedgerClosed)
-                  ? 14 + MediaQuery.of(context).viewPadding.bottom
-                  : 14,
+            padding: EdgeInsets.only(
+              bottom: (_isStockClosed || widget.isLedgerClosed)
+                  ? MediaQuery.of(context).viewPadding.bottom
+                  : 0,
             ),
             itemCount: _sortedItems.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 14),
+            separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
             itemBuilder: (context, index) {
               final itemDoc = _sortedItems[index];
               final itemId = itemDoc.id;
@@ -689,8 +685,7 @@ class _StockTabState extends State<StockTab> {
               final openingStock = (entry['openingStock'] ?? 0).toDouble();
               final totalIn = (entry['totalIn'] ?? 0).toDouble();
               final totalOut = (entry['totalOut'] ?? 0).toDouble();
-              final currentStock =
-                  (entry['closingStock'] ?? openingStock).toDouble();
+              final currentStock = (entry['closingStock'] ?? openingStock).toDouble();
               final salesValue = (entry['salesValue'] ?? 0).toDouble();
               final fmt = NumberFormat('#,##0.##');
               final fmtMoney = NumberFormat('#,##,##0.00');
@@ -701,11 +696,6 @@ class _StockTabState extends State<StockTab> {
                   .where((s) => bagTotals.containsKey(s))
                   .map((s) => '${s}kg × ${bagTotals[s]}')
                   .toList();
-
-              // Left border color: red only for out-of-stock, blue otherwise
-              final accentColor = isOutOfStock
-                  ? const Color(0xFFD32F2F)
-                  : const Color(0xFF1565C0);
 
               return GestureDetector(
                 onTap: () => Navigator.push(
@@ -729,26 +719,13 @@ class _StockTabState extends State<StockTab> {
                   fmtMoney: fmtMoney,
                 ),
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border(
-                      left: BorderSide(color: accentColor, width: 4),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.07),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
+                  color: Colors.white,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 14, 16, 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── Item name + sales amount ──
+                        // Header Row: Item Name, Price and Today's Sales
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -759,242 +736,197 @@ class _StockTabState extends State<StockTab> {
                                   Text(
                                     itemName,
                                     style: const TextStyle(
-                                      fontSize: 17,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.black87,
                                     ),
                                   ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '₹${fmtMoney.format(price)} / kg',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (salesValue > 0)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    'TODAY\'S SALES',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '₹${fmtMoney.format(price)} per kg',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[500],
+                                    '₹${fmtMoney.format(salesValue)}',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.black87,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text('Sales',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[500])),
-                                const SizedBox(height: 2),
-                                ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 150),
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      '₹${fmtMoney.format(salesValue)}',
-                                      style: TextStyle(
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.w800,
-                                        color: salesValue > 0
-                                            ? Colors.black87
-                                            : Colors.grey[400],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
 
-                        const SizedBox(height: 12),
-                        Divider(height: 1, color: Colors.grey[200]),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 16),
 
-                        // ── Stats row ──
-                        Row(
-                          children: [
-                            _statCol('Opening',
-                                '${fmt.format(openingStock)} kgs',
-                                Colors.black87),
-                            _vertDivider(),
-                            _statCol(
-                                'IN', '+${fmt.format(totalIn)} kgs',
-                                Colors.black87),
-                            _vertDivider(),
-                            _statCol(
-                                'OUT', '-${fmt.format(totalOut)} kgs',
-                                Colors.black87),
-                            _vertDivider(),
-                            _statCol(
-                                'Current',
-                                '${fmt.format(currentStock)} kgs',
-                                accentColor,
-                                bold: true),
-                          ],
+                        // ── Stats Box ──
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F9FA),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              _minimalStat('OPENING', '${fmt.format(openingStock)}kg'),
+                              _statDivider(),
+                              _minimalStat('IN', '+${fmt.format(totalIn)}kg'),
+                              _statDivider(),
+                              _minimalStat('OUT', '-${fmt.format(totalOut)}kg'),
+                              _statDivider(),
+                              _minimalStat('CURRENT', '${fmt.format(currentStock)}kg', isBold: true),
+                            ],
+                          ),
                         ),
 
-                        // ── Warning ──
-                        if (isOutOfStock || isLowStock) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Icon(Icons.warning_amber_rounded,
-                                  size: 13,
-                                  color: isOutOfStock
-                                      ? const Color(0xFFD32F2F)
-                                      : Colors.grey[700]),
-                              const SizedBox(width: 5),
-                              Text(
-                                isOutOfStock
-                                    ? 'Out of stock'
-                                    : 'Low stock — less than 1 bag left',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isOutOfStock
-                                      ? const Color(0xFFD32F2F)
-                                      : Colors.grey[700],
-                                ),
+                        // ── Inventory Warnings and Bags Sold ──
+                        if (isOutOfStock || isLowStock || bagEntries.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          if (isOutOfStock || isLowStock)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF7E6),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFFE58F)),
                               ),
-                            ],
-                          ),
-                        ],
-
-                        // ── Bags sold ──
-                        if (bagEntries.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.shopping_bag_outlined,
-                                  size: 13, color: Colors.grey[500]),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  'Bags:  ${bagEntries.join('  ·  ')}',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600]),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        const SizedBox(height: 12),
-                        Divider(height: 1, color: Colors.grey[200]),
-                            const SizedBox(height: 8),
-
-                            // ── Gesture hints ──
-                            Row(
-                              children: [
-                                Icon(Icons.touch_app_outlined,
-                                    size: 11, color: Colors.grey[400]),
-                                const SizedBox(width: 3),
-                                Text('Hold for log',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey[400])),
-                                const Spacer(),
-                                Icon(Icons.history,
-                                    size: 11, color: Colors.grey[400]),
-                                const SizedBox(width: 3),
-                                Text('Tap for history',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey[400])),
-                              ],
-                            ),
-
-                            const SizedBox(height: 10),
-
-                            // ── Action buttons ──
-                            if (!_isStockClosed && !widget.isLedgerClosed)
-                              Row(
+                              child: Row(
                                 children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () =>
-                                          _showInDialog(itemId, itemName),
-                                      icon: const Icon(
-                                          Icons.add_circle_outline,
-                                          size: 16,
-                                          color: Colors.white),
-                                      label: const Text('IN',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 14,
-                                              color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            const Color(0xFF2E7D32),
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 11),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(9)),
-                                      ),
-                                    ),
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: Colors.orange.shade800,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () =>
-                                          _showOutDialog(itemId, itemName),
-                                      icon: const Icon(
-                                          Icons.remove_circle_outline,
-                                          size: 16,
-                                          color: Colors.white),
-                                      label: const Text('OUT',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 14,
-                                              color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            const Color(0xFF1976D2),
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 11),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(9)),
-                                      ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    isOutOfStock ? 'Out of stock' : 'Low stock — less than 1 bag left',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.orange.shade900,
                                     ),
                                   ),
                                 ],
-                              )
-                            else
-                              Container(
-                                width: double.infinity,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 10),
+                              ),
+                            ),
+                          if (bagEntries.isNotEmpty)
+                            Padding(
+                              padding: EdgeInsets.only(top: (isOutOfStock || isLowStock) ? 8 : 0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(9),
+                                  color: const Color(0xFFF1F3F5),
+                                  borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.lock_outline,
-                                        size: 14, color: Colors.grey[400]),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      _isStockClosed
-                                          ? 'Stock Closed'
-                                          : 'Ledger Closed',
-                                      style: TextStyle(
+                                    Icon(Icons.shopping_bag_rounded, size: 16, color: Colors.grey.shade700),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Bags Sold: ${bagEntries.join(', ')}',
+                                        style: TextStyle(
                                           fontSize: 13,
-                                          color: Colors.grey[500],
-                                          fontWeight: FontWeight.w600),
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey.shade800,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
+                            ),
+                        ],
+
+                        // Action Buttons Layer
+                        if (!_isStockClosed && !widget.isLedgerClosed) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: () => _showInDialog(itemId, itemName),
+                                  icon: Icon(Icons.add_rounded, size: 18, color: Colors.green.shade700),
+                                  label: Text('STOCK IN',
+                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.green.shade800)),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    backgroundColor: Colors.green.shade50,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: () => _showOutDialog(itemId, itemName),
+                                  icon: Icon(Icons.remove_rounded, size: 18, color: Colors.blue.shade700),
+                                  label: Text('STOCK OUT',
+                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.blue.shade800)),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    backgroundColor: Colors.blue.shade50,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        ] else ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.lock_outline, size: 15, color: Colors.grey.shade400),
+                                const SizedBox(width: 10),
+                                Text(
+                                  _isStockClosed ? 'STOCK CLOSED' : 'LEDGER CLOSED',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    letterSpacing: 1.2,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ); // GestureDetector
             },
@@ -1305,7 +1237,7 @@ class _StockTabState extends State<StockTab> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: color),
@@ -1321,7 +1253,7 @@ class _StockTabState extends State<StockTab> {
           padding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text('$count entr${count == 1 ? 'y' : 'ies'}',
@@ -1503,6 +1435,43 @@ class _StockTabState extends State<StockTab> {
     );
   }
 
+  Widget _minimalStat(String label, String value, {bool isBold = false}) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label, 
+            style: TextStyle(
+              fontSize: 10, 
+              color: Colors.grey.shade500, 
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            )
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value, 
+            style: TextStyle(
+              fontSize: 14, 
+              color: isBold ? Colors.black : Colors.grey.shade800, 
+              fontWeight: FontWeight.w900
+            )
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider() {
+    return Container(
+      width: 1,
+      height: 20,
+      color: Colors.grey.shade200,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
+
   Widget _statBox(
       String label, String value, Color textColor, Color bgColor) {
     return Expanded(
@@ -1517,7 +1486,7 @@ class _StockTabState extends State<StockTab> {
             Text(label,
                 style: TextStyle(
                     fontSize: 10,
-                    color: textColor.withValues(alpha: 0.75),
+                    color: textColor.withOpacity(0.75),
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(value,

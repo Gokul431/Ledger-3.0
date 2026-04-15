@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'Addcustomer.dart';
@@ -346,7 +345,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                             color: isCurrentlyActive ? Colors.green : Colors.red,
                             trailing: Switch(
                               value: isCurrentlyActive,
-                              activeColor: Colors.green,
+                              activeThumbColor: Colors.green,
                               onChanged: (value) async {
                                 setModalState(() => isCurrentlyActive = value);
                                 await _updateCustomerStatus(customerId, value);

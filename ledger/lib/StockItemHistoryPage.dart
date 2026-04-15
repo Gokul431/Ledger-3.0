@@ -105,7 +105,7 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
             Text(
               '₹${fmtMoney.format(widget.price)} per kg  •  Last 30 days',
               style:
-                  TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.85)),
+                  TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
             ),
           ],
         ),
@@ -175,7 +175,7 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
                             : null,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
+                            color: Colors.black.withOpacity(0.06),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -206,7 +206,7 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
                                         horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFF4285F4)
-                                          .withValues(alpha: 0.1),
+                                          .withOpacity(0.1),
                                       borderRadius:
                                           BorderRadius.circular(20),
                                     ),

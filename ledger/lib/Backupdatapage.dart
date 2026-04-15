@@ -444,7 +444,7 @@ class _BackupDataPageState extends State<BackupDataPage> {
                   ),
                   trailing: Switch(
                     value: _autoBackupEnabled,
-                    activeColor: const Color(0xFF4285F4),
+                    activeThumbColor: const Color(0xFF4285F4),
                     onChanged: (value) {
                       _saveAutoBackupSettings(value);
                     },

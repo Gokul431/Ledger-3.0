@@ -7,7 +7,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart' as excel_pkg;
 import 'package:open_file/open_file.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ExportLedgerPage extends StatefulWidget {
@@ -436,7 +435,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
             'credit': isCredit ? amount : 0.0,
             'closing': runningBalance,
           };
-        }).toList(),
+        }),
       ];
 
       // Calculate totals
@@ -644,7 +643,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                           ),
                         ],
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
 
@@ -786,7 +785,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
             'credit': isCredit ? amount : 0.0,
             'closing': runningBalance,
           };
-        }).toList(),
+        }),
       ];
 
       // Calculate totals

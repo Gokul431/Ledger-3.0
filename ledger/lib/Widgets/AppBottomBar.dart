@@ -10,7 +10,7 @@ import '../Settings.dart';
 class AppBottomBar extends StatelessWidget {
   final int currentIndex;
 
-  const AppBottomBar({Key? key, this.currentIndex = 0}) : super(key: key);
+  const AppBottomBar({super.key, this.currentIndex = 0});
 
   void _onItemTapped(BuildContext context, int index) {
     if (index == currentIndex) return;

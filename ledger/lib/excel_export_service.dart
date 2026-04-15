@@ -60,7 +60,7 @@ class ExcelExportService {
           'debit': !isCredit ? amount : 0.0,
           'credit': isCredit ? amount : 0.0,
         };
-      }).toList(),
+      }),
     ];
 
     // ✅ Calculate totals (including opening balance)
