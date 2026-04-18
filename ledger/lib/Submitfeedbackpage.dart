@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SubmitFeedbackPage extends StatefulWidget {
@@ -55,7 +55,7 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
                   hintText: 'Share your thoughts, suggestions, or issues...',
                   border: const OutlineInputBorder(),
                   focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.blue[700]!, width: 2),
+                    borderSide: BorderSide(color: const Color(0xFF455A64)!, width: 2),
                   ),
                 ),
               ),
@@ -102,7 +102,7 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
               foregroundColor: Colors.white,
             ),
             child: const Text('Submit'),
@@ -137,8 +137,9 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Submit Feedback',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
@@ -168,12 +169,12 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
                   onChanged: (value) {
                     setState(() => _selectedCategory = value!);
                   },
-                  activeColor: const Color(0xFF4285F4),
+                  activeColor: const Color(0xFF455A64),
                   title: Text(category['name']),
                   secondary: Icon(
                     category['icon'],
                     color: isSelected
-                        ? const Color(0xFF4285F4)
+                        ? const Color(0xFF455A64)
                         : Colors.grey[400],
                   ),
                 ),
@@ -190,7 +191,7 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
             child: ElevatedButton(
               onPressed: _isSubmitting ? null : _showFeedbackDialog,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -228,23 +229,23 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: const Color(0xFFECEFF1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue[200]!),
+                border: Border.all(color: const Color(0xFFB0BEC5)!),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue[700]),
+                      Icon(Icons.info_outline, color: const Color(0xFF455A64)),
                       const SizedBox(width: 12),
                       Text(
                         'Feedback Information',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue[900],
+                          color: const Color(0xFF263238),
                         ),
                       ),
                     ],
@@ -258,7 +259,7 @@ class _SubmitFeedbackPageState extends State<SubmitFeedbackPage> {
                     '• Minimum 10 characters required',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.blue[900],
+                      color: const Color(0xFF263238),
                       height: 1.5,
                     ),
                   ),

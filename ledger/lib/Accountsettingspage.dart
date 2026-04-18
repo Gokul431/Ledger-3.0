@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AccountSettingsPage extends StatefulWidget {
@@ -114,7 +114,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
               foregroundColor: Colors.white,
             ),
             child: const Text('Update'),
@@ -213,7 +213,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
               foregroundColor: Colors.white,
             ),
             child: const Text('Update'),
@@ -248,8 +248,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Account Settings',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
@@ -305,23 +306,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.blue[50],
+                      color: const Color(0xFFECEFF1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue[200]!),
+                      border: Border.all(color: const Color(0xFFB0BEC5)!),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.blue[700]),
+                            Icon(Icons.info_outline, color: const Color(0xFF455A64)),
                             const SizedBox(width: 12),
                             Text(
                               'Account Information',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue[900],
+                                color: const Color(0xFF263238),
                               ),
                             ),
                           ],
@@ -334,7 +335,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                           '• Remember your new credentials',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.blue[900],
+                            color: const Color(0xFF263238),
                             height: 1.5,
                           ),
                         ),

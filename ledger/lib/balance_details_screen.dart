@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -30,14 +30,12 @@ class BalanceDetailsScreen extends StatelessWidget {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFFE8EAED)),
         ),
         title: const Text(
           'Balance details',
@@ -46,7 +44,6 @@ class BalanceDetailsScreen extends StatelessWidget {
             letterSpacing: 0.3,
           ),
         ),
-        foregroundColor: Colors.white,
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: () async {
@@ -142,12 +139,12 @@ class BalanceDetailsScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4285F4).withOpacity(0.1),
+                        color: const Color(0xFF455A64).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.account_balance_wallet_outlined,
-                        color: Color(0xFF4285F4),
+                        color: Color(0xFF455A64),
                         size: 22,
                       ),
                     ),

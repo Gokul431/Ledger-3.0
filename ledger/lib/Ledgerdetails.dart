@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
@@ -785,12 +785,12 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.blue[50],
+                            color: const Color(0xFFECEFF1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
                             Icons.edit_outlined,
-                            color: Colors.blue[700],
+                            color: const Color(0xFF455A64),
                             size: 20,
                           ),
                         ),
@@ -1305,7 +1305,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -1403,7 +1403,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           ),
           title: const Row(
             children: [
-              Icon(Icons.edit_outlined, color: Color(0xFF4285F4), size: 24),
+              Icon(Icons.edit_outlined, color: Color(0xFF455A64), size: 24),
               SizedBox(width: 12),
               Text(
                 'Edit Closing Balance',
@@ -1461,7 +1461,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                    borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
                   ),
                 ),
                 style: const TextStyle(
@@ -1511,7 +1511,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                 _updateClosingBalanceManually(newAmount);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1610,7 +1610,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           ),
           title: const Row(
             children: [
-              Icon(Icons.download, color: Color(0xFF4285F4), size: 22),
+              Icon(Icons.download, color: Color(0xFF455A64), size: 22),
               SizedBox(width: 8),
               Text(
                 'Download Format',
@@ -1869,7 +1869,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
               icon: const Icon(Icons.open_in_new, size: 18),
               label: const Text('Open'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
               ),
             ),
@@ -1927,15 +1927,16 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Ledger Details',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -1944,8 +1945,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1963,7 +1965,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
               'As of Date: $ledgerDate',
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.grey[500],
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1971,11 +1973,12 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 4,
+          indicatorColor: const Color(0xFF455A64),
+          indicatorWeight: 3,
           indicatorSize: TabBarIndicatorSize.tab,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white.withOpacity(0.6),
+          labelColor: const Color(0xFF455A64),
+          unselectedLabelColor: Colors.grey,
+          dividerColor: const Color(0xFFE8EAED),
           labelStyle: const TextStyle(
             fontWeight: FontWeight.w800, 
             fontSize: 13,
@@ -2000,7 +2003,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.lock_outline_rounded, size: isLandscape ? 22 : 24, color: Colors.white),
+            icon: Icon(Icons.lock_outline_rounded, size: isLandscape ? 22 : 24, color: const Color(0xFF455A64)),
             tooltip: "Close Ledger",
             onPressed: () {
               Navigator.push(
@@ -2019,7 +2022,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             },
           ),
           IconButton(
-            icon: Icon(Icons.add_circle_outline_rounded, size: isLandscape ? 24 : 26, color: Colors.white),
+            icon: Icon(Icons.add_circle_outline_rounded, size: isLandscape ? 24 : 26, color: const Color(0xFF455A64)),
             tooltip: (_isLedgerClosed && _isEmployeeLogin)
                 ? "Cannot add - Ledger is closed"
                 : "Add Transaction",
@@ -2251,7 +2254,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             builder: (context, snapshot) {
               final docs = snapshot.data?.docs ?? [];
               return FloatingActionButton(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 onPressed:
                     _isDownloading ? null : () => _showDownloadDialog(docs),
                 tooltip: 'Download Report',

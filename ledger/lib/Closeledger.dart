@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -570,7 +570,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4285F4),
+                    backgroundColor: const Color(0xFF455A64),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -604,12 +604,12 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.blue[50],
+                  color: const Color(0xFFECEFF1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.check_circle,
-                  color: Colors.blue[600],
+                  color: const Color(0xFF546E7A),
                   size: 60,
                 ),
               ),
@@ -643,7 +643,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     await _loadLedgerData();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4285F4),
+                    backgroundColor: const Color(0xFF455A64),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -747,7 +747,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     _saveLedgerToFirestore();
                   },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
               foregroundColor: Colors.white,
             ),
             child: const Text('Update Ledger'),
@@ -773,8 +773,9 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -828,7 +829,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.blue[400]!, Colors.blue[600]!],
+                        colors: [const Color(0xFF78909C)!, const Color(0xFF546E7A)!],
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -921,8 +922,8 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Colors.blue[400]!,
-                                        Colors.blue[600]!,
+                                        const Color(0xFF78909C)!,
+                                        const Color(0xFF546E7A)!,
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(8),
@@ -1120,7 +1121,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: const BorderSide(
-                                color: Color(0xFF4285F4),
+                                color: Color(0xFF455A64),
                                 width: 2,
                               ),
                             ),
@@ -1178,7 +1179,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                               borderSide: const BorderSide(
-                                color: Color(0xFF4285F4),
+                                color: Color(0xFF455A64),
                                 width: 2,
                               ),
                             ),
@@ -1242,7 +1243,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                 ? _showConfirmUpdateDialog
                                 : _showConfirmCloseDialog,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4285F4),
+                          backgroundColor: const Color(0xFF455A64),
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: Colors.grey[400],
                           disabledForegroundColor: Colors.white70,

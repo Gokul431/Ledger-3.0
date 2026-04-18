@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shimmer/shimmer.dart';
@@ -94,12 +94,12 @@ class _ShopsPageState extends State<ShopsPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4285F4).withOpacity(0.1),
+                    color: const Color(0xFF455A64).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.store,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 24,
                   ),
                 ),
@@ -144,7 +144,7 @@ class _ShopsPageState extends State<ShopsPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4285F4).withOpacity(0.1),
+                          color: const Color(0xFF455A64).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
@@ -152,7 +152,7 @@ class _ShopsPageState extends State<ShopsPage> {
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF4285F4),
+                            color: Color(0xFF455A64),
                           ),
                         ),
                       ),
@@ -162,7 +162,7 @@ class _ShopsPageState extends State<ShopsPage> {
                 IconButton(
                   icon: const Icon(
                     Icons.phone_android,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 20,
                   ),
                   onPressed: () {
@@ -181,7 +181,7 @@ class _ShopsPageState extends State<ShopsPage> {
                 IconButton(
                   icon: const Icon(
                     Icons.edit_outlined,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 20,
                   ),
                   onPressed: () {
@@ -275,8 +275,9 @@ class _ShopsPageState extends State<ShopsPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Shops',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
@@ -437,7 +438,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.phone_android, color: Color(0xFF4285F4), size: 22),
+              const Icon(Icons.phone_android, color: Color(0xFF455A64), size: 22),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -511,17 +512,17 @@ class _CreateShopPageState extends State<CreateShopPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: const Color(0xFFECEFF1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                      Icon(Icons.info_outline, color: const Color(0xFF455A64), size: 20),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'If the device details above match the device you want to authorize, click "Use This Device ID".',
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                          style: TextStyle(fontSize: 12, color: const Color(0xFF455A64)),
                         ),
                       ),
                     ],
@@ -561,7 +562,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 minimumSize: const Size(0, 40),
@@ -748,8 +749,9 @@ class _CreateShopPageState extends State<CreateShopPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text('Create Shop'),
       ),
       body: Stack(
@@ -763,7 +765,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
                   padding: const EdgeInsets.all(20),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF4285F4), Color(0xFF2E7FE8)],
+                      colors: [Color(0xFF455A64), Color(0xFF2E7FE8)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -899,7 +901,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
                               }
                             },
                             style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFF4285F4).withOpacity(0.1),
+                              backgroundColor: const Color(0xFF455A64).withOpacity(0.1),
                               padding: const EdgeInsets.all(16),
                             ),
                           ),
@@ -909,23 +911,23 @@ class _CreateShopPageState extends State<CreateShopPage> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.blue[50],
+                          color: const Color(0xFFECEFF1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue[200]!),
+                          border: Border.all(color: const Color(0xFFB0BEC5)!),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
+                                Icon(Icons.info_outline, color: const Color(0xFF455A64), size: 18),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Employee can only login from this device. Admin can change Device ID anytime.',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.blue[900],
+                                      color: const Color(0xFF263238),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -941,7 +943,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
                               '• iOS: Uses Identifier for Vendor',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.blue[800],
+                                color: const Color(0xFF455A64),
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
@@ -978,7 +980,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _createShop,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4285F4),
+                      backgroundColor: const Color(0xFF455A64),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -1024,14 +1026,14 @@ class _CreateShopPageState extends State<CreateShopPage> {
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF4285F4), size: 20),
+        Icon(icon, color: const Color(0xFF455A64), size: 20),
         const SizedBox(width: 8),
         Text(
           title,
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF4285F4),
+            color: Color(0xFF455A64),
             letterSpacing: 0.5,
           ),
         ),
@@ -1057,7 +1059,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
       decoration: InputDecoration(
         labelText: isRequired ? '$label *' : label,
         labelStyle: const TextStyle(
-          color: Color(0xFF4285F4),
+          color: Color(0xFF455A64),
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
@@ -1067,7 +1069,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
           fontWeight: FontWeight.w400,
           fontSize: 13,
         ),
-        prefixIcon: Icon(icon, color: const Color(0xFF4285F4), size: 20),
+        prefixIcon: Icon(icon, color: const Color(0xFF455A64), size: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
@@ -1078,7 +1080,7 @@ class _CreateShopPageState extends State<CreateShopPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
         ),
         counterText: '',
         filled: true,
@@ -1299,7 +1301,7 @@ class _EditShopPageState extends State<EditShopPage> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.phone_android, color: Color(0xFF4285F4), size: 22),
+              const Icon(Icons.phone_android, color: Color(0xFF455A64), size: 22),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -1372,17 +1374,17 @@ class _EditShopPageState extends State<EditShopPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue[50],
+                    color: const Color(0xFFECEFF1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                      Icon(Icons.info_outline, color: const Color(0xFF455A64), size: 20),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'If the device details above match the device you want to authorize, click "Use This Device ID".',
-                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                          style: TextStyle(fontSize: 12, color: const Color(0xFF455A64)),
                         ),
                       ),
                     ],
@@ -1422,7 +1424,7 @@ class _EditShopPageState extends State<EditShopPage> {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 minimumSize: const Size(0, 40),
@@ -1484,8 +1486,9 @@ class _EditShopPageState extends State<EditShopPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text('Edit Shop'),
       ),
       body: Stack(
@@ -1499,7 +1502,7 @@ class _EditShopPageState extends State<EditShopPage> {
                   padding: const EdgeInsets.all(20),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Color(0xFF4285F4), Color(0xFF2E7FE8)],
+                      colors: [Color(0xFF455A64), Color(0xFF2E7FE8)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1627,7 +1630,7 @@ class _EditShopPageState extends State<EditShopPage> {
                               }
                             },
                             style: IconButton.styleFrom(
-                              backgroundColor: const Color(0xFF4285F4).withOpacity(0.1),
+                              backgroundColor: const Color(0xFF455A64).withOpacity(0.1),
                               padding: const EdgeInsets.all(16),
                             ),
                           ),
@@ -1637,23 +1640,23 @@ class _EditShopPageState extends State<EditShopPage> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.blue[50],
+                          color: const Color(0xFFECEFF1),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue[200]!),
+                          border: Border.all(color: const Color(0xFFB0BEC5)!),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(Icons.info_outline, color: Colors.blue[700], size: 18),
+                                Icon(Icons.info_outline, color: const Color(0xFF455A64), size: 18),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Employee can only login from this device. Admin can change Device ID anytime.',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.blue[900],
+                                      color: const Color(0xFF263238),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -1671,7 +1674,7 @@ class _EditShopPageState extends State<EditShopPage> {
                                 '• iOS: Uses Identifier for Vendor',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.blue[800],
+                                  color: const Color(0xFF455A64),
                                 ),
                               ),
                             ),
@@ -1708,7 +1711,7 @@ class _EditShopPageState extends State<EditShopPage> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _updateShop,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4285F4),
+                      backgroundColor: const Color(0xFF455A64),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -1769,7 +1772,7 @@ class _EditShopPageState extends State<EditShopPage> {
       decoration: InputDecoration(
         labelText: isRequired ? '$label *' : label,
         labelStyle: const TextStyle(
-          color: Color(0xFF4285F4),
+          color: Color(0xFF455A64),
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
@@ -1779,7 +1782,7 @@ class _EditShopPageState extends State<EditShopPage> {
           fontWeight: FontWeight.w400,
           fontSize: 13,
         ),
-        prefixIcon: Icon(icon, color: const Color(0xFF4285F4), size: 20),
+        prefixIcon: Icon(icon, color: const Color(0xFF455A64), size: 20),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
@@ -1790,7 +1793,7 @@ class _EditShopPageState extends State<EditShopPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
         ),
         counterText: '',
         filled: true,
@@ -1806,14 +1809,14 @@ class _EditShopPageState extends State<EditShopPage> {
   Widget _buildSectionHeader(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF4285F4), size: 20),
+        Icon(icon, color: const Color(0xFF455A64), size: 20),
         const SizedBox(width: 8),
         Text(
           title,
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF4285F4),
+            color: Color(0xFF455A64),
             letterSpacing: 0.5,
           ),
         ),
@@ -1845,8 +1848,9 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1988,7 +1992,7 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF4285F4).withOpacity(0.05),
+              color: const Color(0xFF455A64).withOpacity(0.05),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -1999,12 +2003,12 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4285F4).withOpacity(0.1),
+                    color: const Color(0xFF455A64).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.phone_android,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 24,
                   ),
                 ),
@@ -2091,7 +2095,7 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
                       const Icon(
                         Icons.history,
                         size: 18,
-                        color: Color(0xFF4285F4),
+                        color: Color(0xFF455A64),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -2158,7 +2162,7 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
               width: 12,
               height: 12,
               decoration: BoxDecoration(
-                color: isFirst ? Colors.green : const Color(0xFF4285F4),
+                color: isFirst ? Colors.green : const Color(0xFF455A64),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
               ),

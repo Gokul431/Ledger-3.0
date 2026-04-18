@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
@@ -151,7 +151,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF4285F4)),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF455A64)),
           ),
           child: child!,
         );
@@ -177,7 +177,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF4285F4)),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF455A64)),
           ),
           child: child!,
         );
@@ -1263,8 +1263,9 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Export Ledger',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
@@ -1275,7 +1276,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Color(0xFF4285F4)),
+                  CircularProgressIndicator(color: Color(0xFF455A64)),
                   SizedBox(height: 16),
                   Text('Loading shops...'),
                 ],
@@ -1381,7 +1382,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                                               children: [
                                                 const Icon(
                                                   Icons.store,
-                                                  color: Color(0xFF4285F4),
+                                                  color: Color(0xFF455A64),
                                                   size: 20,
                                                 ),
                                                 const SizedBox(width: 12),
@@ -1409,15 +1410,15 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            border: Border.all(color: Colors.blue[200]!),
+                            color: const Color(0xFFECEFF1),
+                            border: Border.all(color: const Color(0xFFB0BEC5)!),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
                               Icon(
                                 Icons.store,
-                                color: Colors.blue[700],
+                                color: const Color(0xFF455A64),
                                 size: 20,
                               ),
                               const SizedBox(width: 12),
@@ -1426,7 +1427,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.blue[700],
+                                  color: const Color(0xFF455A64),
                                 ),
                               ),
                             ],
@@ -1489,7 +1490,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                   onChanged: (value) {
                     setState(() => _selectedFormat = value!);
                   },
-                  activeColor: const Color(0xFF4285F4),
+                  activeColor: const Color(0xFF455A64),
                   title: const Text('PDF'),
                   subtitle: const Text('Best for printing and sharing'),
                   secondary: Icon(
@@ -1506,7 +1507,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                   onChanged: (value) {
                     setState(() => _selectedFormat = value!);
                   },
-                  activeColor: const Color(0xFF4285F4),
+                  activeColor: const Color(0xFF455A64),
                   title: const Text('Excel'),
                   subtitle: const Text('Best for data analysis'),
                   secondary: Icon(
@@ -1525,7 +1526,7 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                   child: ElevatedButton(
                     onPressed: _isExporting ? null : _exportData,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4285F4),
+                      backgroundColor: const Color(0xFF455A64),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

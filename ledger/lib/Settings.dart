@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
@@ -247,12 +247,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (iconColor ?? const Color(0xFF4285F4)).withOpacity(0.1),
+                color: (iconColor ?? const Color(0xFF455A64)).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: iconColor ?? const Color(0xFF4285F4),
+                color: iconColor ?? const Color(0xFF455A64),
                 size: isLandscape ? 22 : 24,
               ),
             ),
@@ -367,20 +367,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: Colors.white,
         appBar: AppBar(
           elevation: 0,
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           systemOverlayStyle: const SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.light,
-            statusBarBrightness: Brightness.dark,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
           ),
           title: Text(
             'Settings',
@@ -409,10 +402,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       padding: EdgeInsets.all(isLandscape ? 14 : 16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4285F4).withOpacity(0.1),
+                        color: const Color(0xFF455A64).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: const Color(0xFF4285F4).withOpacity(0.2),
+                          color: const Color(0xFF455A64).withOpacity(0.2),
                         ),
                       ),
                       child: Row(
@@ -422,7 +415,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             children: [
                               Icon(
                                 Icons.store,
-                                color: const Color(0xFF4285F4),
+                                color: const Color(0xFF455A64),
                                 size: isLandscape ? 22 : 24,
                               ),
                               SizedBox(width: isLandscape ? 12 : 14),
@@ -442,7 +435,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     style: TextStyle(
                                       fontSize: isLandscape ? 18 : 20,
                                       fontWeight: FontWeight.w700,
-                                      color: const Color(0xFF4285F4),
+                                      color: const Color(0xFF455A64),
                                     ),
                                   ),
                                 ],
@@ -521,7 +514,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       subtitle: 'Update your credentials ',
                       hasTrailingArrow: true,
                       iconColor: const Color(
-                        0xFF4285F4,
+                        0xFF455A64,
                       ), // Blue to match app theme
                       isLandscape: isLandscape,
                       onTap: () {
@@ -593,13 +586,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4285F4).withOpacity(0.1),
+                            color: const Color(0xFF455A64).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
                             Icons.info_outline,
                             size: isLandscape ? 28 : 32,
-                            color: const Color(0xFF4285F4),
+                            color: const Color(0xFF455A64),
                           ),
                         ),
                         SizedBox(height: isLandscape ? 10 : 12),

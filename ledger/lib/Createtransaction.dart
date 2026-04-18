@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -315,7 +315,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                       _buildImageSourceOption(
                         icon: Icons.camera_alt,
                         label: 'Camera',
-                        color: const Color(0xFF4285F4),
+                        color: const Color(0xFF455A64),
                         onTap: () {
                           Navigator.pop(context);
                           _pickImage(ImageSource.camera);
@@ -324,7 +324,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                       _buildImageSourceOption(
                         icon: Icons.photo_library,
                         label: 'Gallery',
-                        color: const Color(0xFF4285F4),
+                        color: const Color(0xFF455A64),
                         onTap: () {
                           Navigator.pop(context);
                           _pickImage(ImageSource.gallery);
@@ -576,7 +576,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isActive
-                          ? const Color(0xFF4285F4)
+                          ? const Color(0xFF455A64)
                           : Colors.grey[300],
                     ),
                     child: Center(
@@ -616,15 +616,16 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Create Transaction',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -633,8 +634,9 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Create Transaction',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -656,17 +658,17 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4285F4).withOpacity(0.1),
+                      color: const Color(0xFF455A64).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: const Color(0xFF4285F4).withOpacity(0.3),
+                        color: const Color(0xFF455A64).withOpacity(0.3),
                       ),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.calendar_today,
-                          color: Color(0xFF4285F4),
+                          color: Color(0xFF455A64),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -674,7 +676,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF4285F4),
+                            color: Color(0xFF455A64),
                           ),
                         ),
                       ],
@@ -783,24 +785,24 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4285F4).withOpacity(0.1),
+                              color: const Color(0xFF455A64).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: const Color(0xFF4285F4).withOpacity(0.3),
+                                color: const Color(0xFF455A64).withOpacity(0.3),
                               ),
                             ),
                             child: const Row(
                               children: [
                                 Icon(
                                   Icons.add_circle_outline,
-                                  color: Color(0xFF4285F4),
+                                  color: Color(0xFF455A64),
                                 ),
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
                                     'No customers. Tap to add one.',
                                     style: TextStyle(
-                                      color: Color(0xFF4285F4),
+                                      color: Color(0xFF455A64),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -1044,7 +1046,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4285F4),
+                            backgroundColor: const Color(0xFF455A64),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -1092,9 +1094,9 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue[50],
+        color: const Color(0xFFECEFF1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue[200]!),
+        border: Border.all(color: const Color(0xFFB0BEC5)!),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1110,7 +1112,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.blue, size: 18),
+              const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
               const SizedBox(width: 8),
               Text(
                 _customerLedgerType == CustomerLedgerType.yes
@@ -1128,7 +1130,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
               padding: const EdgeInsets.only(top: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.blue, size: 18),
+                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
                   const SizedBox(width: 8),
                   Text(
                     _ledgerPaymentType == LedgerPaymentType.paymentIn
@@ -1147,7 +1149,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
               padding: const EdgeInsets.only(top: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.blue, size: 18),
+                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
                   const SizedBox(width: 8),
                   Text(
                     _selectedCustomerName ?? 'Customer selected',
@@ -1164,7 +1166,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
               padding: const EdgeInsets.only(top: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.blue, size: 18),
+                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
                   const SizedBox(width: 8),
                   Text(
                     'Amount: ₹${_amountController.text}',
@@ -1185,7 +1187,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                     _selectedImage != null
                         ? Icons.check_circle
                         : Icons.radio_button_unchecked,
-                    color: Colors.blue,
+                    color: const Color(0xFF455A64),
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -1212,7 +1214,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
-    Color color = const Color(0xFF4285F4),
+    Color color = const Color(0xFF455A64),
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1309,7 +1311,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -1376,7 +1378,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
             icon: const Icon(Icons.camera_alt, size: 18),
             label: const Text('Change Photo'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(

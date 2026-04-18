@@ -41,7 +41,6 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
       return (date: date, str: DateFormat('dd-MMM-yyyy').format(date));
     });
 
-    // Fetch all 30 days in parallel, nulls for failures
     final results = await Future.wait<DocumentSnapshot<Map<String, dynamic>>?>(
       dates.map((d) => FirebaseFirestore.instance
           .collection(widget.shopCollection)
@@ -78,287 +77,6 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final fmtMoney = NumberFormat('#,##,##0.00');
-
-    return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.itemName,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-            Text(
-              '₹${fmtMoney.format(widget.price)} per kg  •  Last 30 days',
-              style:
-                  TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.85)),
-            ),
-          ],
-        ),
-      ),
-      backgroundColor: const Color(0xFFF5F6FA),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF4285F4)))
-          : _history.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.history, size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No history found',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Stock entries will appear here',
-                        style:
-                            TextStyle(fontSize: 14, color: Colors.grey[500]),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _history.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final record = _history[index];
-                    final date = record['date'] as DateTime;
-                    final dateStr = record['dateStr'] as String;
-                    final data = record['data'] as Map<String, dynamic>;
-
-                    final openingStock =
-                        (data['openingStock'] ?? 0).toDouble();
-                    final totalIn = (data['totalIn'] ?? 0).toDouble();
-                    final totalOut = (data['totalOut'] ?? 0).toDouble();
-                    final closingStock =
-                        (data['closingStock'] ?? 0).toDouble();
-                    final salesValue = (data['salesValue'] ?? 0).toDouble();
-                    final isClosed = data['isClosed'] ?? false;
-                    final inEntries =
-                        data['inEntries'] as List<dynamic>? ?? [];
-                    final outEntries =
-                        data['outEntries'] as List<dynamic>? ?? [];
-
-                    final fmt = NumberFormat('#,##0.##');
-                    final todayStr = DateFormat('dd-MMM-yyyy')
-                        .format(widget.currentDate);
-                    final isToday = dateStr == todayStr;
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: isToday
-                            ? Border.all(
-                                color: const Color(0xFF4285F4), width: 2)
-                            : null,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Date header row
-                            Row(
-                              children: [
-                                Icon(Icons.calendar_today_outlined,
-                                    size: 14, color: Colors.grey[600]),
-                                const SizedBox(width: 6),
-                                Text(
-                                  DateFormat('dd MMM yyyy').format(date),
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.black87),
-                                ),
-                                if (isToday) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF4285F4)
-                                          .withOpacity(0.1),
-                                      borderRadius:
-                                          BorderRadius.circular(20),
-                                    ),
-                                    child: const Text(
-                                      'Today',
-                                      style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF4285F4)),
-                                    ),
-                                  ),
-                                ],
-                                const Spacer(),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: isClosed
-                                        ? Colors.orange[50]
-                                        : Colors.green[50],
-                                    borderRadius:
-                                        BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: isClosed
-                                          ? Colors.orange[300]!
-                                          : Colors.green[300]!,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    isClosed ? 'Closed' : 'Open',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: isClosed
-                                            ? Colors.orange[700]
-                                            : Colors.green[700]),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            const Divider(height: 1),
-                            const SizedBox(height: 10),
-
-                            // Stock stats
-                            Row(
-                              children: [
-                                _statCell('Opening',
-                                    '${fmt.format(openingStock)} kgs',
-                                    Colors.blue[700]!),
-                                _statCell('IN',
-                                    '+${fmt.format(totalIn)} kgs',
-                                    Colors.green[700]!),
-                                _statCell('OUT',
-                                    '-${fmt.format(totalOut)} kgs',
-                                    Colors.orange[700]!),
-                                _statCell('Closing',
-                                    '${fmt.format(closingStock)} kgs',
-                                    const Color(0xFF4285F4)),
-                              ],
-                            ),
-
-                            // Sales value
-                            if (salesValue > 0) ...[
-                              const SizedBox(height: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 7),
-                                decoration: BoxDecoration(
-                                  color: Colors.green[50],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border:
-                                      Border.all(color: Colors.green[200]!),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Sales Value',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey[700],
-                                          fontWeight: FontWeight.w500),
-                                    ),
-                                    Text(
-                                      '₹${fmtMoney.format(salesValue)}',
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.green[700]),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-
-                            // IN entries
-                            if (inEntries.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              _buildEntriesSection(
-                                'Stock IN',
-                                Icons.add_circle_outline,
-                                Colors.green[700]!,
-                                Colors.green[50]!,
-                                Colors.green[200]!,
-                                inEntries.map((e) {
-                                  final qty =
-                                      (e['qty'] as num?)?.toDouble() ?? 0;
-                                  final ts = e['timestamp'] as String?;
-                                  final timeStr = _parseTime(ts);
-                                  return '+${fmt.format(qty)} kgs'
-                                      '${timeStr.isNotEmpty ? '  •  $timeStr' : ''}';
-                                }).toList(),
-                              ),
-                            ],
-
-                            // OUT entries
-                            if (outEntries.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              _buildEntriesSection(
-                                'Stock OUT',
-                                Icons.remove_circle_outline,
-                                Colors.orange[700]!,
-                                Colors.orange[50]!,
-                                Colors.orange[200]!,
-                                outEntries.map((e) {
-                                  final totalQty =
-                                      (e['totalQty'] as num?)?.toDouble() ??
-                                          0;
-                                  final bags =
-                                      e['bags'] as List<dynamic>? ?? [];
-                                  final ts = e['timestamp'] as String?;
-                                  final timeStr = _parseTime(ts);
-                                  final bagStr = bags
-                                      .map((b) =>
-                                          '${b['bagSize']}kg×${b['bags']}')
-                                      .join(', ');
-                                  return '-${fmt.format(totalQty)} kgs  ($bagStr)'
-                                      '${timeStr.isNotEmpty ? '  •  $timeStr' : ''}';
-                                }).toList(),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-
   String _parseTime(String? ts) {
     if (ts == null) return '';
     try {
@@ -368,75 +86,455 @@ class _StockItemHistoryPageState extends State<StockItemHistoryPage> {
     }
   }
 
-  Widget _buildEntriesSection(
-    String title,
-    IconData icon,
-    Color color,
-    Color bgColor,
-    Color borderColor,
-    List<String> entries,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 13, color: color),
-              const SizedBox(width: 5),
-              Text(
-                title,
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700, color: color),
+  @override
+  Widget build(BuildContext context) {
+    final fmtMoney = NumberFormat('#,##,##0.00');
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        surfaceTintColor: Colors.transparent,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.itemName,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+                color: Colors.black87,
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ...entries.asMap().entries.map(
-                (e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            Text(
+              '₹${fmtMoney.format(widget.price)} per kg  •  Last 30 days',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: Colors.grey[200]),
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          : _history.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('${e.key + 1}.  ',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: color,
-                              fontWeight: FontWeight.w600)),
-                      Expanded(
-                        child: Text(e.value,
-                            style: TextStyle(fontSize: 12, color: color)),
+                      Icon(Icons.inbox_outlined,
+                          size: 48, color: Colors.grey[300]),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No history found',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Stock entries will appear here',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                       ),
                     ],
                   ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.only(
+                    bottom: 24 + MediaQuery.of(context).viewPadding.bottom,
+                  ),
+                  itemCount: _history.length,
+                  itemBuilder: (context, index) {
+                    final record = _history[index];
+                    final date = record['date'] as DateTime;
+                    final dateStr = record['dateStr'] as String;
+                    final data = record['data'] as Map<String, dynamic>;
+
+                    final openingStock = (data['openingStock'] ?? 0).toDouble();
+                    final totalIn = (data['totalIn'] ?? 0).toDouble();
+                    final totalOut = (data['totalOut'] ?? 0).toDouble();
+                    final closingStock = (data['closingStock'] ?? 0).toDouble();
+                    final salesValue = (data['salesValue'] ?? 0).toDouble();
+                    final isClosed = data['isClosed'] ?? false;
+                    final inEntries = data['inEntries'] as List<dynamic>? ?? [];
+                    final outEntries = data['outEntries'] as List<dynamic>? ?? [];
+
+                    final fmt = NumberFormat('#,##0.##');
+                    final todayStr =
+                        DateFormat('dd-MMM-yyyy').format(widget.currentDate);
+                    final isToday = dateStr == todayStr;
+
+                    return _DaySection(
+                      date: date,
+                      isToday: isToday,
+                      isClosed: isClosed,
+                      openingStock: openingStock,
+                      totalIn: totalIn,
+                      totalOut: totalOut,
+                      closingStock: closingStock,
+                      salesValue: salesValue,
+                      inEntries: inEntries,
+                      outEntries: outEntries,
+                      fmt: fmt,
+                      fmtMoney: fmtMoney,
+                      parseTime: _parseTime,
+                      isLast: index == _history.length - 1,
+                    );
+                  },
+                ),
+    );
+  }
+}
+
+class _DaySection extends StatelessWidget {
+  final DateTime date;
+  final bool isToday;
+  final bool isClosed;
+  final double openingStock;
+  final double totalIn;
+  final double totalOut;
+  final double closingStock;
+  final double salesValue;
+  final List<dynamic> inEntries;
+  final List<dynamic> outEntries;
+  final NumberFormat fmt;
+  final NumberFormat fmtMoney;
+  final String Function(String?) parseTime;
+  final bool isLast;
+
+  const _DaySection({
+    required this.date,
+    required this.isToday,
+    required this.isClosed,
+    required this.openingStock,
+    required this.totalIn,
+    required this.totalOut,
+    required this.closingStock,
+    required this.salesValue,
+    required this.inEntries,
+    required this.outEntries,
+    required this.fmt,
+    required this.fmtMoney,
+    required this.parseTime,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Date header ──────────────────────────────────────
+        Container(
+          color: Colors.grey[50],
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Text(
+                DateFormat('dd MMM yyyy').format(date),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isToday ? const Color(0xFF455A64) : Colors.black87,
+                  letterSpacing: 0.2,
                 ),
               ),
+              if (isToday) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF455A64),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Today',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ],
+              const Spacer(),
+              Text(
+                isClosed ? 'Closed' : 'Open',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isClosed ? Colors.grey[500] : Colors.green[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Stock summary row ─────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: [
+              Expanded(child: _StockStat(
+                  label: 'Opening', value: '${fmt.format(openingStock)} kg')),
+              _dividerDot(),
+              Expanded(child: _StockStat(
+                  label: 'IN',
+                  value: '+${fmt.format(totalIn)} kg',
+                  valueColor: totalIn > 0 ? Colors.green[700] : null)),
+              _dividerDot(),
+              Expanded(child: _StockStat(
+                  label: 'OUT',
+                  value: '-${fmt.format(totalOut)} kg',
+                  valueColor: totalOut > 0 ? Colors.red[600] : null)),
+              _dividerDot(),
+              Expanded(child: _StockStat(
+                  label: 'Closing',
+                  value: '${fmt.format(closingStock)} kg',
+                  valueColor: Colors.black87)),
+            ],
+          ),
+        ),
+
+        // ── Sales value ───────────────────────────────────────
+        if (salesValue > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                Text(
+                  'Sales',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '₹${fmtMoney.format(salesValue)}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── IN entries ────────────────────────────────────────
+        if (inEntries.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Stock IN',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[400],
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          ...inEntries.asMap().entries.map((e) {
+            final qty = (e.value['qty'] as num?)?.toDouble() ?? 0;
+            final ts = e.value['timestamp'] as String?;
+            final timeStr = parseTime(ts);
+            final bags = e.value['bags'] as List<dynamic>? ?? [];
+            final bagStr = bags
+                .where((b) => ((b['bags'] as num?)?.toInt() ?? 0) > 0)
+                .map((b) => '${b['bagSize']}kg × ${b['bags']}')
+                .join('  •  ');
+            return _EntryRow(
+              index: e.key + 1,
+              qty: '+${fmt.format(qty)} kgs',
+              detail: bagStr.isNotEmpty ? bagStr : null,
+              time: timeStr,
+              isIn: true,
+            );
+          }),
         ],
-      ),
+
+        // ── OUT entries ───────────────────────────────────────
+        if (outEntries.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Stock OUT',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[400],
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          ...outEntries.asMap().entries.map((e) {
+            final totalQty = (e.value['totalQty'] as num?)?.toDouble() ?? 0;
+            final bags = e.value['bags'] as List<dynamic>? ?? [];
+            final ts = e.value['timestamp'] as String?;
+            final timeStr = parseTime(ts);
+            final bagStr = bags
+                .map((b) => '${b['bagSize']}kg × ${b['bags']}')
+                .join('  •  ');
+            return _EntryRow(
+              index: e.key + 1,
+              qty: '-${fmt.format(totalQty)} kgs',
+              detail: bagStr.isNotEmpty ? bagStr : null,
+              time: timeStr,
+              isIn: false,
+            );
+          }),
+        ],
+
+        const SizedBox(height: 12),
+        if (!isLast) Divider(height: 1, color: Colors.grey[200]),
+      ],
     );
   }
 
-  Widget _statCell(String label, String value, Color color) {
-    return Expanded(
-      child: Column(
+  Widget _dividerDot() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Text('·', style: TextStyle(color: Colors.grey[300], fontSize: 16)),
+      );
+}
+
+class _StockStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _StockStat({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[400],
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: valueColor ?? Colors.grey[700],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EntryRow extends StatelessWidget {
+  final int index;
+  final String qty;
+  final String? detail;
+  final String time;
+  final bool isIn;
+
+  const _EntryRow({
+    required this.index,
+    required this.qty,
+    required this.detail,
+    required this.time,
+    required this.isIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
+          // Index dot
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$index',
               style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[500],
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700, color: color),
-            textAlign: TextAlign.center,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey[500],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Left accent bar
+          Container(
+            width: 2,
+            height: detail != null ? 36 : 20,
+            decoration: BoxDecoration(
+              color: isIn ? Colors.green[300] : Colors.red[300],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+
+          // Content
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      qty,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isIn ? Colors.green[700] : Colors.red[600],
+                      ),
+                    ),
+                    if (time.isNotEmpty) ...[
+                      const Spacer(),
+                      Text(
+                        time,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      ),
+                    ],
+                  ],
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    detail!,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

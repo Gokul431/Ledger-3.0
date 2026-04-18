@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -499,7 +499,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF4285F4), Color(0xFF2E5BF8)],
+            colors: [Color(0xFF455A64), Color(0xFF2E5BF8)],
           ),
         ),
         child: SafeArea(
@@ -650,7 +650,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                               strokeWidth: 2,
                                               valueColor:
                                                   AlwaysStoppedAnimation<Color>(
-                                                    Color(0xFF4285F4),
+                                                    Color(0xFF455A64),
                                                   ),
                                             ),
                                           ),
@@ -664,7 +664,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                           border: Border.all(
                                             color: _selectedShopCollection !=
                                                     null
-                                                ? const Color(0xFF4285F4)
+                                                ? const Color(0xFF455A64)
                                                 : Colors.grey[300]!,
                                             width: 2,
                                           ),
@@ -735,7 +735,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                                       Icons
                                                           .store_mall_directory,
                                                       color: const Color(
-                                                          0xFF4285F4),
+                                                          0xFF455A64),
                                                       size: 22,
                                                     ),
                                                     const SizedBox(width: 14),
@@ -811,7 +811,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                       hintText: 'Enter your username',
                                       prefixIcon: const Icon(
                                         Icons.account_circle_outlined,
-                                        color: Color(0xFF4285F4),
+                                        color: Color(0xFF455A64),
                                         size: 24,
                                       ),
                                       border: InputBorder.none,
@@ -868,7 +868,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                       hintText: 'Enter your password',
                                       prefixIcon: const Icon(
                                         Icons.lock_outlined,
-                                        color: Color(0xFF4285F4),
+                                        color: Color(0xFF455A64),
                                         size: 24,
                                       ),
                                       suffixIcon: GestureDetector(
@@ -915,7 +915,7 @@ class _EmployeeLoginScreenState extends State<EmployeeLoginScreen>
                                         ? null
                                         : _loginAsEmployee,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF4285F4),
+                                      backgroundColor: const Color(0xFF455A64),
                                       foregroundColor: Colors.white,
                                       elevation: _isLoading ? 2 : 4,
                                       shape: RoundedRectangleBorder(

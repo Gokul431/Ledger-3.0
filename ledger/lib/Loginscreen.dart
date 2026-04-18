@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
@@ -910,7 +910,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ],
           ),
-          backgroundColor: const Color(0xFF4285F4),
+          backgroundColor: const Color(0xFF455A64),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -933,7 +933,7 @@ class _LoginScreenState extends State<LoginScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF4285F4), Color(0xFF2E5BF8)],
+            colors: [Color(0xFF455A64), Color(0xFF37474F)],
           ),
         ),
         child: SafeArea(
@@ -1210,7 +1210,7 @@ class _LoginScreenState extends State<LoginScreen>
                   hintText: 'Enter your phone number',
                   prefixIcon: const Icon(
                     Icons.phone_outlined,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 24,
                   ),
                   border: InputBorder.none,
@@ -1246,7 +1246,7 @@ class _LoginScreenState extends State<LoginScreen>
                         _sendOTP(phone);
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4285F4),
+                  backgroundColor: const Color(0xFF455A64),
                   foregroundColor: Colors.white,
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -1324,7 +1324,7 @@ class _LoginScreenState extends State<LoginScreen>
                   hintText: 'Enter 6-digit OTP',
                   prefixIcon: const Icon(
                     Icons.lock_outlined,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                     size: 24,
                   ),
                   border: InputBorder.none,
@@ -1363,7 +1363,7 @@ class _LoginScreenState extends State<LoginScreen>
                         _verifyOTP(otp);
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4285F4),
+                  backgroundColor: const Color(0xFF455A64),
                   foregroundColor: Colors.white,
                   elevation: 4,
                   shape: RoundedRectangleBorder(
@@ -1400,7 +1400,7 @@ class _LoginScreenState extends State<LoginScreen>
                     'Resend OTP',
                     style: TextStyle(
                       fontSize: 14,
-                      color: const Color(0xFF4285F4),
+                      color: const Color(0xFF455A64),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1534,7 +1534,7 @@ class _LoginScreenState extends State<LoginScreen>
                 hintText: 'Enter your username',
                 prefixIcon: const Icon(
                   Icons.account_circle_outlined,
-                  color: Color(0xFF4285F4),
+                  color: Color(0xFF455A64),
                   size: 24,
                 ),
                 border: InputBorder.none,
@@ -1585,7 +1585,7 @@ class _LoginScreenState extends State<LoginScreen>
                 hintText: 'Enter your password',
                 prefixIcon: const Icon(
                   Icons.lock_outlined,
-                  color: Color(0xFF4285F4),
+                  color: Color(0xFF455A64),
                   size: 24,
                 ),
                 suffixIcon: GestureDetector(
@@ -1624,7 +1624,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: ElevatedButton(
               onPressed: _isLoading ? null : _loginAsClient,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 elevation: 4,
                 shape: RoundedRectangleBorder(
@@ -1763,7 +1763,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
                                     valueColor: AlwaysStoppedAnimation<Color>(
-                                      Color(0xFF4285F4),
+                                      Color(0xFF455A64),
                                     ),
                                   ),
                                 ),
@@ -1775,7 +1775,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: _selectedShopId != null
-                                      ? const Color(0xFF4285F4)
+                                      ? const Color(0xFF455A64)
                                       : Colors.grey[300]!,
                                   width: 2,
                                 ),
@@ -1837,7 +1837,7 @@ class _LoginScreenState extends State<LoginScreen>
                                         children: [
                                           Icon(
                                             Icons.store_mall_directory,
-                                            color: const Color(0xFF4285F4),
+                                            color: const Color(0xFF455A64),
                                             size: 22,
                                           ),
                                           const SizedBox(width: 14),
@@ -1898,7 +1898,7 @@ class _LoginScreenState extends State<LoginScreen>
                             hintText: 'Enter your username',
                             prefixIcon: const Icon(
                               Icons.account_circle_outlined,
-                              color: Color(0xFF4285F4),
+                              color: Color(0xFF455A64),
                               size: 24,
                             ),
                             border: InputBorder.none,
@@ -1954,7 +1954,7 @@ class _LoginScreenState extends State<LoginScreen>
                             hintText: 'Enter your password',
                             prefixIcon: const Icon(
                               Icons.lock_outlined,
-                              color: Color(0xFF4285F4),
+                              color: Color(0xFF455A64),
                               size: 24,
                             ),
                             suffixIcon: GestureDetector(
@@ -1999,7 +1999,7 @@ class _LoginScreenState extends State<LoginScreen>
                               ? null
                               : _loginAsEmployee,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4285F4),
+                            backgroundColor: const Color(0xFF455A64),
                             disabledBackgroundColor: Colors.grey[400],
                             elevation: 4,
                             shape: RoundedRectangleBorder(
@@ -2073,7 +2073,7 @@ class _LoginScreenState extends State<LoginScreen>
                 height: 56,
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF4285F4), Color(0xFF2E5BF8)],
+                    colors: [Color(0xFF455A64), Color(0xFF37474F)],
                   ),
                   borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
@@ -2111,7 +2111,7 @@ class _LoginScreenState extends State<LoginScreen>
                   child: CircularProgressIndicator(
                     strokeWidth: 2.5,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF4285F4),
+                      Color(0xFF455A64),
                     ),
                   ),
                 )

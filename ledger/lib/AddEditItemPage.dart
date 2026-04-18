@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
@@ -131,7 +131,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
       lastDate: DateTime(2100),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(primary: Color(0xFF1565C0)),
+          colorScheme: const ColorScheme.light(primary: Color(0xFF455A64)),
         ),
         child: child!,
       ),
@@ -186,7 +186,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFF1565C0), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
@@ -202,8 +202,9 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF1565C0),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         title: Text(
           isEdit ? 'Edit Item' : 'New Item',
@@ -225,13 +226,13 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50.withOpacity(0.6),
+                        color: const Color(0xFFECEFF1).withOpacity(0.6),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade100.withOpacity(0.5)),
+                        border: Border.all(color: const Color(0xFFCFD8DC).withOpacity(0.5)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.storefront_rounded, size: 20, color: Colors.blue.shade700),
+                          Icon(Icons.storefront_rounded, size: 20, color: const Color(0xFF455A64)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
@@ -239,7 +240,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                               style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.blue.shade800),
+                                  color: const Color(0xFF455A64)),
                             ),
                           ),
                         ],
@@ -329,7 +330,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                           ),
                           Switch(
                             value: _isActive,
-                            activeTrackColor: const Color(0xFF1565C0),
+                            activeTrackColor: const Color(0xFF455A64),
                             activeColor: Colors.white,
                             onChanged: (v) => setState(() => _isActive = v),
                           ),
@@ -353,7 +354,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _saveItem,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
+                  backgroundColor: const Color(0xFF455A64),
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 54),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

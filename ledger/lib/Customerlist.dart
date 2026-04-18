@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -307,7 +307,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                           _buildOptionTile(
                             icon: Icons.edit,
                             title: 'Edit Name',
-                            color: const Color(0xFF4285F4),
+                            color: const Color(0xFF455A64),
                             onTap: () {
                               Navigator.pop(context);
                               _showEditNameDialog(customerId, currentName);
@@ -437,7 +437,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF4285F4)),
+                  borderSide: const BorderSide(color: Color(0xFF455A64)),
                 ),
               ),
               textInputAction: TextInputAction.done,
@@ -465,7 +465,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               if (mounted) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4285F4),
+              backgroundColor: const Color(0xFF455A64),
             ),
             child: const Text('Save', style: TextStyle(color: Colors.white)),
           ),
@@ -591,7 +591,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 if (mounted) Navigator.pop(dialogContext);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
               ),
               child: const Text('Save'),
@@ -750,7 +750,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(isLandscape ? 10 : 12),
-              borderSide: const BorderSide(color: Color(0xFF4285F4)),
+              borderSide: const BorderSide(color: Color(0xFF455A64)),
             ),
             contentPadding: EdgeInsets.symmetric(
               horizontal: isLandscape ? 14 : 16,
@@ -782,7 +782,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         children: [
           Icon(
             Icons.store,
-            color: const Color(0xFF4285F4),
+            color: const Color(0xFF455A64),
             size: isLandscape ? 18 : 20,
           ),
           SizedBox(width: isLandscape ? 12 : 14),
@@ -816,12 +816,12 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               vertical: isLandscape ? 4 : 6,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFF4285F4).withOpacity(0.1),
+              color: const Color(0xFF455A64).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               Icons.check_circle,
-              color: const Color(0xFF4285F4),
+              color: const Color(0xFF455A64),
               size: isLandscape ? 16 : 18,
             ),
           ),
@@ -864,7 +864,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.transparent,
+              color: isSelected ? const Color(0xFF455A64) : Colors.transparent,
               width: 2,
             ),
           ),
@@ -873,7 +873,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.grey[700],
+              color: isSelected ? const Color(0xFF455A64) : Colors.grey[700],
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),
@@ -1009,13 +1009,13 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                     CircleAvatar(
                       radius: isLandscape ? 20 : 24,
                       backgroundColor: const Color(
-                        0xFF4285F4,
+                        0xFF455A64,
                       ).withOpacity(isActive ? 0.1 : 0.05),
                       child: Text(
                         name.isNotEmpty ? name[0].toUpperCase() : 'C',
                         style: TextStyle(
                           color: isActive
-                              ? const Color(0xFF4285F4)
+                              ? const Color(0xFF455A64)
                               : Colors.grey,
                           fontWeight: FontWeight.bold,
                           fontSize: isLandscape ? 16 : 18,
@@ -1119,15 +1119,16 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Customer List',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -1138,8 +1139,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Text(
           'Customer List',
           style: TextStyle(
@@ -1266,7 +1268,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
                 return RefreshIndicator(
                   onRefresh: _handleRefresh,
-                  color: const Color(0xFF4285F4),
+                  color: const Color(0xFF455A64),
                   child: Container(
                     color: Colors.white,
                     child: ListView.builder(
@@ -1335,7 +1337,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Widget _buildEmptyState(bool isLandscape) {
     return RefreshIndicator(
       onRefresh: _handleRefresh,
-      color: const Color(0xFF4285F4),
+      color: const Color(0xFF455A64),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: SizedBox(
@@ -1377,7 +1379,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Widget _buildNoSearchResults(bool isLandscape) {
     return RefreshIndicator(
       onRefresh: _handleRefresh,
-      color: const Color(0xFF4285F4),
+      color: const Color(0xFF455A64),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: SizedBox(

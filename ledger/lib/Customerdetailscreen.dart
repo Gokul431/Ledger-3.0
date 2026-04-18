@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -205,7 +205,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
+                          colors: [Color(0xFF455A64), Color(0xFF455A64)],
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -885,7 +885,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         icon: const Icon(Icons.open_in_new),
                         label: const Text('Open'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4285F4),
+                          backgroundColor: const Color(0xFF455A64),
                           foregroundColor: Colors.white,
                           padding: EdgeInsets.symmetric(
                             vertical: isLandscape ? 12 : 14,
@@ -910,14 +910,14 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         label: const Text('Share'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF4285F4),
+                          foregroundColor: const Color(0xFF455A64),
                           padding: EdgeInsets.symmetric(
                             vertical: isLandscape ? 12 : 14,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                             side: const BorderSide(
-                              color: Color(0xFF4285F4),
+                              color: Color(0xFF455A64),
                               width: 1.5,
                             ),
                           ),
@@ -1000,7 +1000,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         height: isLandscape ? 40 : 44,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
+                            colors: [Color(0xFF455A64), Color(0xFF455A64)],
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -1060,7 +1060,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(
                           child: CircularProgressIndicator(
-                            color: Color(0xFF4285F4),
+                            color: Color(0xFF455A64),
                           ),
                         );
                       }
@@ -1200,12 +1200,12 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF4285F4).withOpacity(0.1),
+              color: const Color(0xFF455A64).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               icon,
-              color: const Color(0xFF4285F4),
+              color: const Color(0xFF455A64),
               size: isLandscape ? 16 : 18,
             ),
           ),
@@ -1468,16 +1468,13 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFFE8EAED)),
         ),
-        foregroundColor: Colors.white,
         title: GestureDetector(
           onTap: () => _showCustomerDetailsBottomSheet(context),
           child: Text(
@@ -1486,7 +1483,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
               fontWeight: FontWeight.w700,
               fontSize: isLandscape ? 18 : 20,
               letterSpacing: 0.3,
-              color: Colors.white,
+              color: const Color(0xFF1A1A2E),
             ),
           ),
         ),
@@ -1705,7 +1702,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
           return FloatingActionButton(
-            backgroundColor: const Color(0xFF4285F4),
+            backgroundColor: const Color(0xFF455A64),
             onPressed: _isDownloading ? null : () => _showDownloadDialog(docs),
             tooltip: 'Download Report',
             child: _isDownloading

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -105,7 +105,7 @@ class _AddCustomerState extends State<AddCustomer> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4285F4),
+              primary: Color(0xFF455A64),
               onPrimary: Colors.white,
               onSurface: Colors.black,
             ),
@@ -296,7 +296,7 @@ class _AddCustomerState extends State<AddCustomer> {
                 height: 32,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isActive ? const Color(0xFF4285F4) : Colors.grey[300],
+                  color: isActive ? const Color(0xFF455A64) : Colors.grey[300],
                 ),
                 child: Center(
                   child: Text(
@@ -364,7 +364,7 @@ class _AddCustomerState extends State<AddCustomer> {
             fillColor: Colors.grey[50],
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 16),
-            prefixIcon: Icon(icon, color: const Color(0xFF4285F4), size: 20),
+            prefixIcon: Icon(icon, color: const Color(0xFF455A64), size: 20),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
@@ -375,7 +375,7 @@ class _AddCustomerState extends State<AddCustomer> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -393,7 +393,7 @@ class _AddCustomerState extends State<AddCustomer> {
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
-    Color color = const Color(0xFF4285F4),
+    Color color = const Color(0xFF455A64),
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -514,15 +514,16 @@ class _AddCustomerState extends State<AddCustomer> {
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Add Customer',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -533,8 +534,9 @@ class _AddCustomerState extends State<AddCustomer> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Add Customer',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -730,7 +732,7 @@ class _AddCustomerState extends State<AddCustomer> {
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4285F4),
+                            backgroundColor: const Color(0xFF455A64),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),

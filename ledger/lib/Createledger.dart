@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -200,7 +200,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4285F4),
+              primary: Color(0xFF455A64),
               onPrimary: Colors.white,
               onSurface: Colors.black87,
             ),
@@ -351,7 +351,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4285F4),
+                      backgroundColor: const Color(0xFF455A64),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -404,12 +404,14 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
           title: const Text('Create Ledger'),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -417,8 +419,9 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -450,7 +453,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.blue[400]!, Colors.blue[600]!],
+                    colors: [const Color(0xFF78909C)!, const Color(0xFF546E7A)!],
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -517,7 +520,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF4285F4),
+                      color: Color(0xFF455A64),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -532,7 +535,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: const Color(0xFF4285F4),
+                          color: const Color(0xFF455A64),
                           width: 1.5,
                         ),
                       ),
@@ -540,7 +543,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                         children: [
                           Icon(
                             Icons.calendar_today,
-                            color: const Color(0xFF4285F4),
+                            color: const Color(0xFF455A64),
                             size: 20,
                           ),
                           const SizedBox(width: 12),
@@ -570,7 +573,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF4285F4),
+                        color: Color(0xFF455A64),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -580,7 +583,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: _selectedShopCollection != null
-                              ? const Color(0xFF4285F4)
+                              ? const Color(0xFF455A64)
                               : Colors.grey[300]!,
                           width: 1.5,
                         ),
@@ -629,7 +632,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                                 children: [
                                   Icon(
                                     Icons.store,
-                                    color: const Color(0xFF4285F4),
+                                    color: const Color(0xFF455A64),
                                     size: 20,
                                   ),
                                   const SizedBox(width: 12),
@@ -657,9 +660,9 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.blue[50],
+                        color: const Color(0xFFECEFF1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue[200]!),
+                        border: Border.all(color: const Color(0xFFB0BEC5)!),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -668,7 +671,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                             children: [
                               Icon(
                                 Icons.account_balance_wallet,
-                                color: Colors.blue[700],
+                                color: const Color(0xFF455A64),
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
@@ -676,7 +679,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                                 'Opening Balance',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.blue[900],
+                                  color: const Color(0xFF263238),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -687,7 +690,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.blue[700],
+                              color: const Color(0xFF455A64),
                             ),
                           ),
                         ],
@@ -730,7 +733,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                             ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [Colors.blue[400]!, Colors.blue[600]!],
+                                colors: [const Color(0xFF78909C)!, const Color(0xFF546E7A)!],
                               ),
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -880,7 +883,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(
-                          color: Color(0xFF4285F4),
+                          color: Color(0xFF455A64),
                           width: 2,
                         ),
                       ),
@@ -925,7 +928,7 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                 child: ElevatedButton(
                   onPressed: _isSaving ? null : _saveLedger,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4285F4),
+                    backgroundColor: const Color(0xFF455A64),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(

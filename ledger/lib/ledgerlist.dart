@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -214,7 +214,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           ),
           title: Row(
             children: [
-              Icon(Icons.info_outline, color: Colors.blue[600], size: 24),
+              Icon(Icons.info_outline, color: const Color(0xFF546E7A), size: 24),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -243,7 +243,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                 _navigateToCreateLedger();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -419,7 +419,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -619,7 +619,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                             child: Container(
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? const Color(0xFF4285F4)
+                                    ? const Color(0xFF455A64)
                                     : Colors.grey[200],
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -656,7 +656,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4285F4),
+                    backgroundColor: const Color(0xFF455A64),
                     foregroundColor: Colors.white,
                   ),
                   child: const Text('Apply'),
@@ -683,7 +683,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4285F4),
+              primary: Color(0xFF455A64),
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Colors.black,
@@ -729,7 +729,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         children: [
           Icon(
             Icons.store,
-            color: const Color(0xFF4285F4),
+            color: const Color(0xFF455A64),
             size: isLandscape ? 18 : 20,
           ),
           const SizedBox(width: 12),
@@ -792,14 +792,14 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
     return Container(
       padding: EdgeInsets.all(isLandscape ? 12 : 16),
       decoration: BoxDecoration(
-        color: Colors.blue[50],
-        border: Border(bottom: BorderSide(color: Colors.blue[200]!)),
+        color: const Color(0xFFECEFF1),
+        border: Border(bottom: BorderSide(color: const Color(0xFFB0BEC5)!)),
       ),
       child: Row(
         children: [
           Icon(
             Icons.store,
-            color: Colors.blue[700],
+            color: const Color(0xFF455A64),
             size: isLandscape ? 18 : 20,
           ),
           const SizedBox(width: 12),
@@ -810,7 +810,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                 'Shop',
                 style: TextStyle(
                   fontSize: isLandscape ? 12 : 13,
-                  color: Colors.blue[600],
+                  color: const Color(0xFF546E7A),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -819,7 +819,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                 style: TextStyle(
                   fontSize: isLandscape ? 15 : 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.blue[900],
+                  color: const Color(0xFF263238),
                 ),
               ),
             ],
@@ -851,7 +851,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                   fillColor: Colors.white,
                   prefixIcon: const Icon(
                     Icons.search,
-                    color: Color(0xFF4285F4),
+                    color: Color(0xFF455A64),
                   ),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
@@ -875,7 +875,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(
-                      color: Color(0xFF4285F4),
+                      color: Color(0xFF455A64),
                       width: 1.5,
                     ),
                   ),
@@ -942,7 +942,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.transparent,
+              color: isSelected ? const Color(0xFF455A64) : Colors.transparent,
               width: 2,
             ),
           ),
@@ -951,7 +951,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.grey[700],
+              color: isSelected ? const Color(0xFF455A64) : Colors.grey[700],
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),
@@ -974,7 +974,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.transparent,
+              color: isSelected ? const Color(0xFF455A64) : Colors.transparent,
               width: 2,
             ),
           ),
@@ -983,7 +983,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.grey[700],
+              color: isSelected ? const Color(0xFF455A64) : Colors.grey[700],
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),
@@ -1006,7 +1006,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.transparent,
+              color: isSelected ? const Color(0xFF455A64) : Colors.transparent,
               width: 2,
             ),
           ),
@@ -1015,7 +1015,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           child: Text(
             label,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF4285F4) : Colors.grey[700],
+              color: isSelected ? const Color(0xFF455A64) : Colors.grey[700],
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
               fontSize: 14,
             ),
@@ -1322,7 +1322,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         ledgerDate == DateFormat('dd-MMM-yyyy').format(DateTime.now());
     final statusColor = isClosed
         ? Colors.red[600]
-        : (isToday ? const Color(0xFF4285F4) : Colors.green[600]);
+        : (isToday ? const Color(0xFF455A64) : Colors.green[600]);
 
     // Debug: Print values being passed
     debugPrint(
@@ -1504,8 +1504,9 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: const Color(0xFF4285F4),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: Text(
             'Ledger List',
             style: TextStyle(
@@ -1515,7 +1516,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)),
+          child: CircularProgressIndicator(color: Color(0xFF455A64)),
         ),
       );
     }
@@ -1524,8 +1525,9 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Text(
           'Ledger List',
           style: TextStyle(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'Loginscreen.dart';
 import 'data/repositories/splash_repository.dart';
 import 'presentation/viewmodels/splash_viewmodel.dart';
@@ -87,8 +87,8 @@ class _SplashScreenState extends State<SplashScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFF1976D2).withOpacity(0.05),
-                      const Color(0xFF42A5F5).withOpacity(0.03),
+                      const Color(0xFF455A64).withOpacity(0.05),
+                      const Color(0xFFB0BEC5).withOpacity(0.03),
                     ],
                   ),
                 ),
@@ -107,7 +107,7 @@ class _SplashScreenState extends State<SplashScreen>
                 height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF1976D2).withOpacity(0.1),
+                  color: const Color(0xFF455A64).withOpacity(0.1),
                 ),
               ),
             ),
@@ -123,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen>
                 height: 300,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF42A5F5).withOpacity(0.08),
+                  color: const Color(0xFFB0BEC5).withOpacity(0.08),
                 ),
               ),
             ),
@@ -148,12 +148,12 @@ class _SplashScreenState extends State<SplashScreen>
                           gradient: const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                            colors: [Color(0xFF455A64), Color(0xFFB0BEC5)],
                           ),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF1976D2).withOpacity(0.3),
+                              color: const Color(0xFF455A64).withOpacity(0.3),
                               blurRadius: 20,
                               offset: const Offset(0, 10),
                             ),
@@ -194,7 +194,7 @@ class _SplashScreenState extends State<SplashScreen>
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF1976D2),
+                              color: Color(0xFF455A64),
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -237,7 +237,7 @@ class _SplashScreenState extends State<SplashScreen>
                             height: 50,
                             child: CircularProgressIndicator(
                               valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFF1976D2),
+                                Color(0xFF455A64),
                               ),
                               strokeWidth: 3,
                             ),

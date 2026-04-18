@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
@@ -253,8 +253,9 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Edit Transaction',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -283,9 +284,9 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: const Color(0xFFECEFF1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue[200]!),
+                border: Border.all(color: const Color(0xFFB0BEC5)!),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,7 +295,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                     children: [
                       Icon(
                         Icons.info_outline,
-                        color: Colors.blue[700],
+                        color: const Color(0xFF455A64),
                         size: 20,
                       ),
                       const SizedBox(width: 8),
@@ -322,7 +323,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4285F4),
+                color: Color(0xFF455A64),
               ),
             ),
             const SizedBox(height: 8),
@@ -360,7 +361,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4285F4),
+                color: Color(0xFF455A64),
               ),
             ),
             const SizedBox(height: 8),
@@ -400,7 +401,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF4285F4),
+                color: Color(0xFF455A64),
               ),
             ),
             const SizedBox(height: 12),
@@ -534,7 +535,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _updateTransaction,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4285F4),
+                  backgroundColor: const Color(0xFF455A64),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(

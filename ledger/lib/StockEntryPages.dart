@@ -1,8 +1,18 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
-// ─── Stock IN Page ───────────────────────────────────────────────────────────
+const List<int> kBagSizes = [30, 26, 10, 5, 1];
+
+// ─── Stock IN Result ──────────────────────────────────────────────────────────
+
+class StockInResult {
+  final double totalQty;
+  final List<Map<String, dynamic>> bagEntries;
+  const StockInResult(this.totalQty, this.bagEntries);
+}
+
+// ─── Stock IN Page ────────────────────────────────────────────────────────────
 
 class StockInPage extends StatefulWidget {
   final String itemName;
@@ -23,28 +33,57 @@ class StockInPage extends StatefulWidget {
 }
 
 class _StockInPageState extends State<StockInPage> {
-  final _controller = TextEditingController();
-  double _enteredQty = 0;
+  late final List<TextEditingController> _controllers;
 
   double get _currentStock =>
       widget.openingStock + widget.totalIn - widget.totalOut;
-  double get _newClosing => _currentStock + _enteredQty;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers =
+        List.generate(kBagSizes.length, (_) => TextEditingController());
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    for (final c in _controllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
+  int _count(int i) => int.tryParse(_controllers[i].text) ?? 0;
+
+  double get _totalIn {
+    double t = 0;
+    for (int i = 0; i < kBagSizes.length; i++) {
+      t += _count(i) * kBagSizes[i];
+    }
+    return t;
+  }
+
   void _submit() {
-    if (_enteredQty <= 0) return;
-    Navigator.pop(context, _enteredQty);
+    if (_totalIn <= 0) return;
+    final bagEntries = <Map<String, dynamic>>[];
+    for (int i = 0; i < kBagSizes.length; i++) {
+      final c = _count(i);
+      if (c > 0) {
+        bagEntries.add({
+          'bagSize': kBagSizes[i],
+          'bags': c,
+          'kgs': c * kBagSizes[i],
+        });
+      }
+    }
+    Navigator.pop(context, StockInResult(_totalIn, bagEntries));
   }
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0.##');
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final bottom = MediaQuery.of(context).viewPadding.bottom;
+    final totalIn = _totalIn;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
@@ -59,17 +98,13 @@ class _StockInPageState extends State<StockInPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Stock IN',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87),
-            ),
-            Text(
-              widget.itemName,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-            ),
+            const Text('New Stock',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87)),
+            Text(widget.itemName,
+                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
         ),
         bottom: PreferredSize(
@@ -77,143 +112,195 @@ class _StockInPageState extends State<StockInPage> {
           child: Divider(height: 1, color: Colors.grey[200]),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16, 20, 16, bottom + 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Current stock card ──
-            _InfoCard(
-              label: 'Current Stock',
-              value: '${fmt.format(_currentStock)} kgs',
-              valueColor: _currentStock <= 0
-                  ? const Color(0xFFD32F2F)
-                  : const Color(0xFF1565C0),
-            ),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+              children: [
+                // ── Current stock ──
+                _InfoCard(
+                  label: 'Stock Available',
+                  value: '${fmt.format(_currentStock)} kg',
+                  valueColor: _currentStock <= 0
+                      ? const Color(0xFFD32F2F)
+                      : const Color(0xFF455A64),
+                ),
+                const SizedBox(height: 20),
 
-            const SizedBox(height: 20),
+                // ── Column headers ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Bag Size',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54)),
+                      ),
+                      Text('No. of Bags',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black54)),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 60,
+                        child: Text('Total',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
 
-            // ── Input ──
-            const Text(
-              'Quantity Arriving',
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black54),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-              ],
-              style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87),
-              textAlign: TextAlign.center,
-              decoration: InputDecoration(
-                hintText: '0',
-                hintStyle: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.grey[300]),
-                suffixText: 'kgs',
-                suffixStyle: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[500]),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[200]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                      color: Color(0xFF1565C0), width: 2),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 20),
-              ),
-              onChanged: (v) {
-                setState(() => _enteredQty = double.tryParse(v) ?? 0);
-              },
-            ),
-
-            // ── Live preview ──
-            if (_enteredQty > 0) ...[
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border(
-                      left: const BorderSide(
-                          color: Color(0xFF1565C0), width: 4)),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('After this entry',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[500],
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 12),
-                    Row(
+                // ── Bag rows ──
+                ...List.generate(kBagSizes.length, (i) {
+                  final size = kBagSizes[i];
+                  final count = _count(i);
+                  final kgs = count * size;
+                  final hasValue = count > 0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: hasValue
+                          ? const Border(
+                              left: BorderSide(
+                                  color: Color(0xFF455A64), width: 3))
+                          : null,
+                    ),
+                    child: Row(
                       children: [
-                        _PreviewCell('Before',
-                            '${fmt.format(_currentStock)} kgs',
-                            Colors.black54),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Icon(Icons.arrow_forward,
-                              size: 16, color: Colors.black38),
+                        // Bag size label
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('$size kg',
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.black87)),
+                              if (hasValue)
+                                Text('= ${fmt.format(kgs)} kg',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500])),
+                            ],
+                          ),
                         ),
-                        _PreviewCell('+IN',
-                            '+${fmt.format(_enteredQty)} kgs',
-                            const Color(0xFF1565C0)),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Icon(Icons.arrow_forward,
-                              size: 16, color: Colors.black38),
+                        // Text field
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            controller: _controllers[i],
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black87),
+                            decoration: InputDecoration(
+                              hintText: '0',
+                              hintStyle: TextStyle(
+                                  fontSize: 16, color: Colors.grey[300]),
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10, horizontal: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[200]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[200]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFF455A64), width: 2),
+                              ),
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
                         ),
-                        _PreviewCell('New Stock',
-                            '${fmt.format(_newClosing)} kgs',
-                            Colors.black87,
-                            bold: true),
+                        // Total kgs
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            hasValue ? '${fmt.format(kgs)} kg' : '',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600]),
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ],
+                  );
+                }),
 
-            const SizedBox(height: 32),
+                // ── Total summary ──
+                if (totalIn > 0) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: const Border(
+                        left: BorderSide(color: Color(0xFF455A64), width: 4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Total IN',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[500])),
+                        Text(
+                          '${fmt.format(totalIn)} kg',
+                          style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.black87),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
 
-            // ── Submit button ──
-            SizedBox(
+          // ── Submit button ──
+          Container(
+            color: Colors.white,
+            padding:
+                EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
+            child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _enteredQty > 0 ? _submit : null,
+                onPressed: totalIn > 0 ? _submit : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
+                  backgroundColor: const Color(0xFF455A64),
                   disabledBackgroundColor: Colors.grey[200],
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -222,28 +309,30 @@ class _StockInPageState extends State<StockInPage> {
                   elevation: 0,
                 ),
                 child: Text(
-                  _enteredQty > 0
-                      ? 'Add ${fmt.format(_enteredQty)} kgs'
-                      : 'Enter Quantity',
+                  totalIn > 0
+                      ? 'Add ${fmt.format(totalIn)} kg'
+                      : 'Enter Bag Quantities',
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Stock OUT Page ──────────────────────────────────────────────────────────
+// ─── Stock OUT Result ─────────────────────────────────────────────────────────
 
 class StockOutResult {
   final double totalQty;
   final List<Map<String, dynamic>> bagEntries;
   const StockOutResult(this.totalQty, this.bagEntries);
 }
+
+// ─── Stock OUT Page ───────────────────────────────────────────────────────────
 
 class StockOutPage extends StatefulWidget {
   final String itemName;
@@ -262,18 +351,29 @@ class StockOutPage extends StatefulWidget {
 }
 
 class _StockOutPageState extends State<StockOutPage> {
-  late final List<int> _counts;
+  late final List<TextEditingController> _controllers;
 
   @override
   void initState() {
     super.initState();
-    _counts = List.filled(widget.bagSizes.length, 0);
+    _controllers = List.generate(
+        widget.bagSizes.length, (_) => TextEditingController());
   }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  int _count(int i) => int.tryParse(_controllers[i].text) ?? 0;
 
   double get _totalOut {
     double t = 0;
     for (int i = 0; i < widget.bagSizes.length; i++) {
-      t += _counts[i] * widget.bagSizes[i];
+      t += _count(i) * widget.bagSizes[i];
     }
     return t;
   }
@@ -284,11 +384,12 @@ class _StockOutPageState extends State<StockOutPage> {
     if (_totalOut <= 0 || _overStock) return;
     final bagEntries = <Map<String, dynamic>>[];
     for (int i = 0; i < widget.bagSizes.length; i++) {
-      if (_counts[i] > 0) {
+      final c = _count(i);
+      if (c > 0) {
         bagEntries.add({
           'bagSize': widget.bagSizes[i],
-          'bags': _counts[i],
-          'kgs': _counts[i] * widget.bagSizes[i],
+          'bags': c,
+          'kgs': c * widget.bagSizes[i],
         });
       }
     }
@@ -299,6 +400,8 @@ class _StockOutPageState extends State<StockOutPage> {
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##0.##');
     final bottom = MediaQuery.of(context).viewPadding.bottom;
+    final totalOut = _totalOut;
+    final overStock = _overStock;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
@@ -313,17 +416,13 @@ class _StockOutPageState extends State<StockOutPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Stock OUT',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black87),
-            ),
-            Text(
-              widget.itemName,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-            ),
+            const Text('Stock Sold',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87)),
+            Text(widget.itemName,
+                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
           ],
         ),
         bottom: PreferredSize(
@@ -339,67 +438,68 @@ class _StockOutPageState extends State<StockOutPage> {
               children: [
                 // ── Available stock ──
                 _InfoCard(
-                  label: 'Available Stock',
-                  value: '${fmt.format(widget.available)} kgs',
+                  label: 'Stock Available',
+                  value: '${fmt.format(widget.available)} kg',
                   valueColor: widget.available <= 0
                       ? const Color(0xFFD32F2F)
-                      : const Color(0xFF1565C0),
+                      : const Color(0xFF455A64),
                 ),
-
                 const SizedBox(height: 20),
 
-                // ── Bag sizes header ──
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Bag Size',
+                // ── Column headers ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Bag Size',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54)),
+                      ),
+                      Text('No. of Bags',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: Colors.black54)),
-                    ),
-                    Text('Quantity',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black54)),
-                    const SizedBox(width: 8),
-                    Text('Total',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black54)),
-                  ],
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 60,
+                        child: Text('Total',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black54)),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
 
                 // ── Bag rows ──
                 ...List.generate(widget.bagSizes.length, (i) {
                   final size = widget.bagSizes[i];
-                  final count = _counts[i];
+                  final count = _count(i);
                   final kgs = count * size;
+                  final hasValue = count > 0;
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
-                      border: count > 0
+                      border: hasValue
                           ? const Border(
                               left: BorderSide(
-                                  color: Color(0xFF1565C0), width: 3))
-                          : Border.all(color: Colors.transparent),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 6,
-                            offset: const Offset(0, 1)),
-                      ],
+                                  color: Color(0xFF455A64), width: 3))
+                          : null,
                     ),
                     child: Row(
                       children: [
+                        // Bag size label
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,37 +509,66 @@ class _StockOutPageState extends State<StockOutPage> {
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.black87)),
-                              if (count > 0)
-                                Text('= ${fmt.format(kgs)} kgs',
+                              if (hasValue)
+                                Text('= ${fmt.format(kgs)} kg',
                                     style: TextStyle(
                                         fontSize: 12,
                                         color: Colors.grey[500])),
                             ],
                           ),
                         ),
-                        // Counter
-                        _CounterButton(
-                          icon: Icons.remove,
-                          enabled: count > 0,
-                          onTap: () =>
-                              setState(() => _counts[i] = count - 1),
-                        ),
-                        Container(
-                          width: 48,
-                          alignment: Alignment.center,
-                          child: Text(
-                            '$count',
+                        // Text field
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            controller: _controllers[i],
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.black87),
+                            decoration: InputDecoration(
+                              hintText: '0',
+                              hintStyle: TextStyle(
+                                  fontSize: 16, color: Colors.grey[300]),
+                              filled: true,
+                              fillColor: const Color(0xFFF5F6FA),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10, horizontal: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[200]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[200]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFF455A64), width: 2),
+                              ),
+                            ),
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
-                        _CounterButton(
-                          icon: Icons.add,
-                          enabled: true,
-                          onTap: () =>
-                              setState(() => _counts[i] = count + 1),
+                        // Total kgs
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            hasValue ? '${fmt.format(kgs)} kg' : '',
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[600]),
+                          ),
                         ),
                       ],
                     ),
@@ -447,7 +576,7 @@ class _StockOutPageState extends State<StockOutPage> {
                 }),
 
                 // ── Total OUT summary ──
-                if (_totalOut > 0) ...[
+                if (totalOut > 0) ...[
                   const SizedBox(height: 4),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -456,18 +585,12 @@ class _StockOutPageState extends State<StockOutPage> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border(
                         left: BorderSide(
-                          color: _overStock
+                          color: overStock
                               ? const Color(0xFFD32F2F)
-                              : const Color(0xFF1565C0),
+                              : const Color(0xFF455A64),
                           width: 4,
                         ),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2)),
-                      ],
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -475,27 +598,26 @@ class _StockOutPageState extends State<StockOutPage> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Total OUT',
+                            Text('Total Sold',
                                 style: TextStyle(
                                     fontSize: 12, color: Colors.grey[500])),
                             const SizedBox(height: 2),
                             Text(
-                              '${fmt.format(_totalOut)} kgs',
+                              '${fmt.format(totalOut)} kg',
                               style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
-                                  color: _overStock
+                                  color: overStock
                                       ? const Color(0xFFD32F2F)
                                       : Colors.black87),
                             ),
                           ],
                         ),
-                        if (_overStock)
+                        if (overStock)
                           Row(
                             children: [
                               const Icon(Icons.warning_amber_rounded,
-                                  size: 16,
-                                  color: Color(0xFFD32F2F)),
+                                  size: 16, color: Color(0xFFD32F2F)),
                               const SizedBox(width: 4),
                               Text('Exceeds\navailable',
                                   textAlign: TextAlign.center,
@@ -513,18 +635,16 @@ class _StockOutPageState extends State<StockOutPage> {
             ),
           ),
 
-          // ── Bottom submit ──
+          // ── Submit button ──
           Container(
             color: Colors.white,
-            padding: EdgeInsets.fromLTRB(
-                16, 12, 16, 12 + bottom),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed:
-                    (_totalOut > 0 && !_overStock) ? _submit : null,
+                onPressed: (totalOut > 0 && !overStock) ? _submit : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1565C0),
+                  backgroundColor: const Color(0xFF455A64),
                   disabledBackgroundColor: Colors.grey[200],
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -533,9 +653,9 @@ class _StockOutPageState extends State<StockOutPage> {
                   elevation: 0,
                 ),
                 child: Text(
-                  _totalOut > 0 && !_overStock
-                      ? 'Record ${fmt.format(_totalOut)} kgs OUT'
-                      : 'Select Bags',
+                  totalOut > 0 && !overStock
+                      ? 'Record ${fmt.format(totalOut)} kg Sold'
+                      : 'Enter Bag Quantities',
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700),
                 ),
@@ -548,7 +668,7 @@ class _StockOutPageState extends State<StockOutPage> {
   }
 }
 
-// ─── Shared widgets ──────────────────────────────────────────────────────────
+// ─── Shared widgets ───────────────────────────────────────────────────────────
 
 class _InfoCard extends StatelessWidget {
   final String label;
@@ -569,7 +689,7 @@ class _InfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
               offset: const Offset(0, 2)),
         ],
@@ -588,72 +708,6 @@ class _InfoCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   color: valueColor)),
         ],
-      ),
-    );
-  }
-}
-
-class _PreviewCell extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final bool bold;
-
-  const _PreviewCell(this.label, this.value, this.color,
-      {this.bold = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey[500],
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 3),
-          Text(value,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                  color: color)),
-        ],
-      ),
-    );
-  }
-}
-
-class _CounterButton extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  const _CounterButton(
-      {required this.icon,
-      required this.enabled,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: enabled
-              ? const Color(0xFF1565C0).withOpacity(0.08)
-              : Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(icon,
-            size: 18,
-            color: enabled
-                ? const Color(0xFF1565C0)
-                : Colors.grey[300]),
       ),
     );
   }

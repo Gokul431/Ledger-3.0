@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
@@ -164,7 +164,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(isLandscape ? 10 : 12),
-              borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(isLandscape ? 10 : 12),
@@ -248,7 +248,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                       if (ledger == 'Custom (Enter your own)') ...[
                         Icon(
                           Icons.edit,
-                          color: const Color(0xFF4285F4),
+                          color: const Color(0xFF455A64),
                           size: isLandscape ? 16 : 18,
                         ),
                         SizedBox(width: isLandscape ? 6 : 8),
@@ -266,7 +266,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                           fontSize: isLandscape ? 13 : 14,
                           fontWeight: FontWeight.w500,
                           color: ledger == 'Custom (Enter your own)'
-                              ? const Color(0xFF4285F4)
+                              ? const Color(0xFF455A64)
                               : Colors.black87,
                         ),
                       ),
@@ -388,8 +388,9 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: Text(
           'Edit Transaction',
           style: TextStyle(
@@ -433,12 +434,12 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                       width: double.infinity,
                       padding: EdgeInsets.all(isLandscape ? 12 : 16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4285F4).withOpacity(0.1),
+                        color: const Color(0xFF455A64).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(
                           isLandscape ? 10 : 12,
                         ),
                         border: Border.all(
-                          color: const Color(0xFF4285F4).withOpacity(0.3),
+                          color: const Color(0xFF455A64).withOpacity(0.3),
                         ),
                       ),
                       child: Row(
@@ -447,7 +448,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                             _transactionType == 'Customer'
                                 ? Icons.person
                                 : Icons.receipt,
-                            color: const Color(0xFF4285F4),
+                            color: const Color(0xFF455A64),
                             size: isLandscape ? 18 : 20,
                           ),
                           SizedBox(width: isLandscape ? 8 : 12),
@@ -460,7 +461,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                                   style: TextStyle(
                                     fontSize: isLandscape ? 14 : 15,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF4285F4),
+                                    color: const Color(0xFF455A64),
                                   ),
                                 ),
                                 if (_customerName.isNotEmpty) ...[
@@ -469,7 +470,7 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
                                     'Customer: $_customerName',
                                     style: TextStyle(
                                       fontSize: isLandscape ? 12 : 13,
-                                      color: const Color(0xFF4285F4),
+                                      color: const Color(0xFF455A64),
                                     ),
                                   ),
                                 ],

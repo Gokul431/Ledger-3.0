@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:shimmer/shimmer.dart';
 import 'StockItemHistoryPage.dart';
 import 'StockEntryPages.dart';
 
@@ -34,21 +35,28 @@ class _StockTabState extends State<StockTab> {
   List<QueryDocumentSnapshot> _items = [];
   // itemId -> stock entry data
   final Map<String, Map<String, dynamic>> _stockEntries = {};
+  // cached bag aggregates per itemId
+  final Map<String, Map<int, int>> _bagCache = {};
+  // stable sorted list — rebuilt only when _stockEntries changes
+  List<QueryDocumentSnapshot> _cachedSorted = [];
+
+  // Formatters created once
+  final _fmt = NumberFormat('#,##0.##');
+  final _fmtMoney = NumberFormat('#,##,##0.00');
 
   String get _ledgerDate =>
       DateFormat('dd-MMM-yyyy').format(widget.date);
 
-  /// Items sorted by today's sales value descending (highest first).
-  List<QueryDocumentSnapshot> get _sortedItems {
-    final sorted = List<QueryDocumentSnapshot>.from(_items);
-    sorted.sort((a, b) {
+  /// Rebuild cached sorted list — call after any _stockEntries change.
+  void _rebuildSorted() {
+    _cachedSorted = List<QueryDocumentSnapshot>.from(_items);
+    _cachedSorted.sort((a, b) {
       final aSales =
           ((_stockEntries[a.id]?['salesValue']) as num? ?? 0).toDouble();
       final bSales =
           ((_stockEntries[b.id]?['salesValue']) as num? ?? 0).toDouble();
       return bSales.compareTo(aSales);
     });
-    return sorted;
   }
 
   CollectionReference get _itemsCol => FirebaseFirestore.instance
@@ -141,7 +149,12 @@ class _StockTabState extends State<StockTab> {
     } catch (e) {
       debugPrint('StockTab init error: $e');
     }
-    if (mounted) setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() {
+        _rebuildSorted();
+        _isLoading = false;
+      });
+    }
   }
 
   /// Find opening stock for today:
@@ -185,17 +198,40 @@ class _StockTabState extends State<StockTab> {
     try {
       final doc = await _stockItemsCol().doc(itemId).get();
       if (doc.exists && mounted) {
-        setState(() => _stockEntries[itemId] = doc.data() as Map<String, dynamic>);
+        setState(() {
+          _stockEntries[itemId] = doc.data() as Map<String, dynamic>;
+          _bagCache.remove(itemId);
+          _rebuildSorted();
+        });
       }
     } catch (e) {
       debugPrint('Refresh error: $e');
     }
   }
 
+  Map<int, int> _aggregateBags(String itemId) {
+    if (_bagCache.containsKey(itemId)) return _bagCache[itemId]!;
+    final entry = _stockEntries[itemId] ?? {};
+    final outEntries = entry['outEntries'] as List<dynamic>? ?? [];
+    final Map<int, int> totals = {};
+    for (final out in outEntries) {
+      final bags = out['bags'] as List<dynamic>? ?? [];
+      for (final b in bags) {
+        final size = (b['bagSize'] as num?)?.toInt() ?? 0;
+        final count = (b['bags'] as num?)?.toInt() ?? 0;
+        if (size > 0 && count > 0) {
+          totals[size] = (totals[size] ?? 0) + count;
+        }
+      }
+    }
+    _bagCache[itemId] = totals;
+    return totals;
+  }
+
   // ─── IN Page ────────────────────────────────────────────────────────────
   void _showInDialog(String itemId, String itemName) {
     final entry = _stockEntries[itemId] ?? {};
-    Navigator.push<double>(
+    Navigator.push<StockInResult>(
       context,
       MaterialPageRoute(
         builder: (_) => StockInPage(
@@ -205,13 +241,16 @@ class _StockTabState extends State<StockTab> {
           totalOut: (entry['totalOut'] ?? 0).toDouble(),
         ),
       ),
-    ).then((qty) {
-      if (qty != null && qty > 0) _submitIn(itemId, qty);
+    ).then((result) {
+      if (result != null && result.totalQty > 0) {
+        _submitIn(itemId, result);
+      }
     });
   }
 
 
-  Future<void> _submitIn(String itemId, double qty) async {
+  Future<void> _submitIn(String itemId, StockInResult result) async {
+    final qty = result.totalQty;
     try {
       final entry = _stockEntries[itemId] ?? {};
       final currentIn = (entry['totalIn'] ?? 0).toDouble();
@@ -226,6 +265,7 @@ class _StockTabState extends State<StockTab> {
         'inEntries': FieldValue.arrayUnion([
           {
             'qty': qty,
+            'bags': result.bagEntries,
             'timestamp': DateTime.now().toIso8601String(),
           }
         ]),
@@ -322,8 +362,6 @@ class _StockTabState extends State<StockTab> {
   // ─── Close Stock ─────────────────────────────────────────────────────────
   Future<void> _closeStock() async {
     // Build summary before showing dialog
-    final fmt = NumberFormat('#,##0.##');
-    final fmtMoney = NumberFormat('#,##,##0.00');
     double previewTotal = 0;
     final List<Map<String, dynamic>> itemSummary = [];
     for (final itemDoc in _items) {
@@ -351,7 +389,7 @@ class _StockTabState extends State<StockTab> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: const BoxDecoration(
-                color: Color(0xFF1565C0),
+                color: Color(0xFF455A64),
                 borderRadius:
                     BorderRadius.vertical(top: Radius.circular(16)),
               ),
@@ -373,7 +411,7 @@ class _StockTabState extends State<StockTab> {
                     DateFormat('dd MMM').format(widget.date),
                     style: TextStyle(
                         fontSize: 13,
-                        color: Colors.white.withOpacity(0.8)),
+                        color: Colors.white.withValues(alpha: 0.8)),
                   ),
                 ],
               ),
@@ -409,14 +447,14 @@ class _StockTabState extends State<StockTab> {
                                     CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '₹${fmtMoney.format(item['sales'])}',
+                                    '₹${_fmtMoney.format(item['sales'])}',
                                     style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
                                         color: Colors.black87),
                                   ),
                                   Text(
-                                    '${fmt.format(item['closing'])} kgs left',
+                                    '${_fmt.format(item['closing'])} kgs left',
                                     style: TextStyle(
                                         fontSize: 11,
                                         color: Colors.grey[500]),
@@ -438,11 +476,11 @@ class _StockTabState extends State<StockTab> {
                                 fontWeight: FontWeight.w700,
                                 color: Colors.black87)),
                         Text(
-                          '₹${fmtMoney.format(previewTotal)}',
+                          '₹${_fmtMoney.format(previewTotal)}',
                           style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF1565C0)),
+                              color: Color(0xFF455A64)),
                         ),
                       ],
                     ),
@@ -501,7 +539,7 @@ class _StockTabState extends State<StockTab> {
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(ctx, true),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1565C0),
+                        backgroundColor: const Color(0xFF455A64),
                         foregroundColor: Colors.white,
                         padding:
                             const EdgeInsets.symmetric(vertical: 13),
@@ -572,21 +610,10 @@ class _StockTabState extends State<StockTab> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_outline,
-                    color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                    'Stock closed. Sales value ₹${NumberFormat('#,##,##0.00').format(totalSalesValue)} added to ledger.'),
-              ],
-            ),
-            backgroundColor: Colors.green[700],
+          const SnackBar(
+            content: Text('Stock closed'),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 4),
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -608,8 +635,74 @@ class _StockTabState extends State<StockTab> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
-          child: CircularProgressIndicator(color: Color(0xFF4285F4)));
+      return Shimmer.fromColors(
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.grey[50]!,
+        child: ListView.separated(
+          padding: EdgeInsets.zero,
+          itemCount: 6,
+          separatorBuilder: (_, __) =>
+              const Divider(height: 1, color: Colors.white),
+          itemBuilder: (_, __) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                        width: 130, height: 14,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4))),
+                    const Spacer(),
+                    Container(
+                        width: 70, height: 14,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4))),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                    width: 90, height: 11,
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4))),
+                const SizedBox(height: 16),
+                Row(
+                  children: List.generate(4, (i) => Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: i < 3 ? 8 : 0),
+                      child: Container(
+                          height: 36,
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8))),
+                    ),
+                  )),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(child: Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10)))),
+                    const SizedBox(width: 12),
+                    Expanded(child: Container(
+                        height: 38,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10)))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     if (_items.isEmpty) {
@@ -673,10 +766,10 @@ class _StockTabState extends State<StockTab> {
                   ? MediaQuery.of(context).viewPadding.bottom
                   : 0,
             ),
-            itemCount: _sortedItems.length,
+            itemCount: _cachedSorted.length,
             separatorBuilder: (_, __) => Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
             itemBuilder: (context, index) {
-              final itemDoc = _sortedItems[index];
+              final itemDoc = _cachedSorted[index];
               final itemId = itemDoc.id;
               final entry = _stockEntries[itemId] ?? {};
 
@@ -687,15 +780,9 @@ class _StockTabState extends State<StockTab> {
               final totalOut = (entry['totalOut'] ?? 0).toDouble();
               final currentStock = (entry['closingStock'] ?? openingStock).toDouble();
               final salesValue = (entry['salesValue'] ?? 0).toDouble();
-              final fmt = NumberFormat('#,##0.##');
-              final fmtMoney = NumberFormat('#,##,##0.00');
-              final isLowStock = currentStock > 0 && currentStock < 30;
+              final isLowStock = currentStock > 0 && currentStock < 1;
               final isOutOfStock = currentStock <= 0;
-              final bagTotals = _aggregateBags(itemId);
-              final bagEntries = kBagSizes
-                  .where((s) => bagTotals.containsKey(s))
-                  .map((s) => '${s}kg × ${bagTotals[s]}')
-                  .toList();
+              final inEntries = (entry['inEntries'] as List<dynamic>?) ?? [];
 
               return GestureDetector(
                 onTap: () => Navigator.push(
@@ -715,8 +802,8 @@ class _StockTabState extends State<StockTab> {
                   itemName: itemName,
                   price: price,
                   entry: entry,
-                  fmt: fmt,
-                  fmtMoney: fmtMoney,
+                  fmt: _fmt,
+                  fmtMoney: _fmtMoney,
                 ),
                 child: Container(
                   color: Colors.white,
@@ -725,7 +812,7 @@ class _StockTabState extends State<StockTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header Row: Item Name, Price and Today's Sales
+                        // ── Header: name + price + today's sales ──
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -743,7 +830,7 @@ class _StockTabState extends State<StockTab> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '₹${fmtMoney.format(price)} / kg',
+                                    '₹${_fmtMoney.format(price)} / kg',
                                     style: TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
@@ -767,7 +854,7 @@ class _StockTabState extends State<StockTab> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '₹${fmtMoney.format(salesValue)}',
+                                    '₹${_fmtMoney.format(salesValue)}',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w800,
@@ -791,139 +878,138 @@ class _StockTabState extends State<StockTab> {
                           ),
                           child: Row(
                             children: [
-                              _minimalStat('OPENING', '${fmt.format(openingStock)}kg'),
+                              _minimalStat('OPENING', '${_fmt.format(openingStock)}kg'),
                               _statDivider(),
-                              _minimalStat('IN', '+${fmt.format(totalIn)}kg'),
+                              _minimalStat('NEW STOCK', '+${_fmt.format(totalIn)}kg'),
                               _statDivider(),
-                              _minimalStat('OUT', '-${fmt.format(totalOut)}kg'),
+                              _minimalStat('CLOSING', '-${_fmt.format(totalOut)}kg'),
                               _statDivider(),
-                              _minimalStat('CURRENT', '${fmt.format(currentStock)}kg', isBold: true),
+                              _minimalStat('SOLD', '${_fmt.format(currentStock)}kg', isBold: true),
                             ],
                           ),
                         ),
 
-                        // ── Inventory Warnings and Bags Sold ──
-                        if (isOutOfStock || isLowStock || bagEntries.isNotEmpty) ...[
+                        // ── Warnings ──
+                        if (isOutOfStock || isLowStock) ...[
                           const SizedBox(height: 12),
-                          if (isOutOfStock || isLowStock)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF7E6),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFFFE58F)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: 16,
-                                    color: Colors.orange.shade800,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    isOutOfStock ? 'Out of stock' : 'Low stock — less than 1 bag left',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.orange.shade900,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (bagEntries.isNotEmpty)
-                            Padding(
-                              padding: EdgeInsets.only(top: (isOutOfStock || isLowStock) ? 8 : 0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF1F3F5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.shopping_bag_rounded, size: 16, color: Colors.grey.shade700),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        'Bags Sold: ${bagEntries.join(', ')}',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade800,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                        ],
-
-                        // Action Buttons Layer
-                        if (!_isStockClosed && !widget.isLedgerClosed) ...[
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextButton.icon(
-                                  onPressed: () => _showInDialog(itemId, itemName),
-                                  icon: Icon(Icons.add_rounded, size: 18, color: Colors.green.shade700),
-                                  label: Text('STOCK IN',
-                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.green.shade800)),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    backgroundColor: Colors.green.shade50,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextButton.icon(
-                                  onPressed: () => _showOutDialog(itemId, itemName),
-                                  icon: Icon(Icons.remove_rounded, size: 18, color: Colors.blue.shade700),
-                                  label: Text('STOCK OUT',
-                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.blue.shade800)),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    backgroundColor: Colors.blue.shade50,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        ] else ...[
-                          const SizedBox(height: 16),
                           Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color: Colors.transparent,
+                              color: const Color(0xFFFFF7E6),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade200),
+                              border: Border.all(color: const Color(0xFFFFE58F)),
                             ),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.lock_outline, size: 15, color: Colors.grey.shade400),
-                                const SizedBox(width: 10),
+                                Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade800),
+                                const SizedBox(width: 8),
                                 Text(
-                                  _isStockClosed ? 'STOCK CLOSED' : 'LEDGER CLOSED',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    letterSpacing: 1.2,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w800,
-                                  ),
+                                  isOutOfStock ? 'Out of stock' : 'Low stock — less than 1 kg left',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.orange.shade900),
                                 ),
                               ],
                             ),
                           ),
                         ],
+
+                        // ── Closing Stock (bag breakdown) — tappable to record OUT ──
+                        const SizedBox(height: 12),
+                        Builder(builder: (_) {
+                          final bagTotals = _aggregateBags(itemId);
+                          final bagStr = bagTotals.isEmpty
+                              ? '${_fmt.format(currentStock)} kg'
+                              : kBagSizes
+                                  .where((s) => bagTotals.containsKey(s))
+                                  .map((s) => '$s×${bagTotals[s]}')
+                                  .join(',  ');
+                          final canAct = !_isStockClosed && !widget.isLedgerClosed;
+                          return GestureDetector(
+                            onTap: canAct ? () => _showOutDialog(itemId, itemName) : null,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: canAct ? Border.all(color: Colors.red.shade200) : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.inventory_2_outlined, size: 16, color: Colors.red.shade700),
+                                  const SizedBox(width: 10),
+                                  Text('C.S',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.red.shade700)),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(bagStr,
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Colors.red.shade900),
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.right),
+                                  ),
+                                  if (canAct) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.chevron_right, size: 16, color: Colors.red.shade400),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+
+                        // ── Stock IN — always shown, tappable to add stock ──
+                        const SizedBox(height: 8),
+                        Builder(builder: (_) {
+                          final canAct = !_isStockClosed && !widget.isLedgerClosed;
+                          final inText = inEntries.isEmpty
+                              ? 'Tap to add new stock'
+                              : 'N.S  ${inEntries.map((e) {
+                                  final qty = (e['qty'] as num?)?.toDouble() ?? 0;
+                                  final bags = e['bags'] as List<dynamic>? ?? [];
+                                  if (bags.isNotEmpty) {
+                                    final bagStr = kBagSizes
+                                        .where((s) => bags.any((b) => (b['bagSize'] as num?)?.toInt() == s && ((b['bags'] as num?)?.toInt() ?? 0) > 0))
+                                        .map((s) {
+                                          final b = bags.firstWhere((b) => (b['bagSize'] as num?)?.toInt() == s);
+                                          return '$s×${(b['bags'] as num?)?.toInt() ?? 0}';
+                                        })
+                                        .join(', ');
+                                    return bagStr.isNotEmpty ? bagStr : '+${_fmt.format(qty)} kg';
+                                  }
+                                  return '+${_fmt.format(qty)} kg';
+                                }).join('   ')}';
+                          return GestureDetector(
+                            onTap: canAct ? () => _showInDialog(itemId, itemName) : null,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: canAct ? Border.all(color: Colors.green.shade200) : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.add_circle_outline, size: 16, color: Colors.green.shade700),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      inText,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: inEntries.isEmpty ? Colors.green.shade400 : Colors.green.shade800,
+                                        fontStyle: inEntries.isEmpty ? FontStyle.italic : FontStyle.normal,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (canAct) ...[
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.chevron_right, size: 16, color: Colors.green.shade400),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -1003,6 +1089,7 @@ class _StockTabState extends State<StockTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return DraggableScrollableSheet(
@@ -1040,11 +1127,7 @@ class _StockTabState extends State<StockTab> {
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
+                            color: const Color(0xFF455A64),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(Icons.inventory_2_outlined,
@@ -1064,7 +1147,7 @@ class _StockTabState extends State<StockTab> {
                                 ),
                               ),
                               Text(
-                                '₹${fmtMoney.format(price)} per kg  •  ${DateFormat('dd MMM yyyy').format(widget.date)}',
+                                '₹${_fmtMoney.format(price)} per kg  •  ${DateFormat('dd MMM yyyy').format(widget.date)}',
                                 style: TextStyle(
                                     fontSize: 12, color: Colors.grey[600]),
                               ),
@@ -1098,21 +1181,21 @@ class _StockTabState extends State<StockTab> {
                         children: [
                           _summaryChip(
                               'Total IN',
-                              '+${fmt.format(totalIn)} kgs',
+                              '+${_fmt.format(totalIn)} kgs',
                               Colors.green[700]!,
                               Colors.green[50]!),
                           const SizedBox(width: 10),
                           _summaryChip(
                               'Total OUT',
-                              '-${fmt.format(totalOut)} kgs',
+                              '-${_fmt.format(totalOut)} kgs',
                               Colors.orange[700]!,
                               Colors.orange[50]!),
                           const SizedBox(width: 10),
                           _summaryChip(
                               'Sales',
-                              '₹${fmtMoney.format(salesValue)}',
-                              Colors.blue[700]!,
-                              Colors.blue[50]!),
+                              '₹${_fmtMoney.format(salesValue)}',
+                              const Color(0xFF455A64),
+                              const Color(0xFFF0F4F7)),
                         ],
                       ),
                     ),
@@ -1125,7 +1208,7 @@ class _StockTabState extends State<StockTab> {
                   Expanded(
                     child: ListView(
                       controller: scrollController,
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                      padding: EdgeInsets.fromLTRB(20, 16, 20, 24 + MediaQuery.of(ctx).padding.bottom),
                       children: [
                         // IN section
                         _logSectionHeader(
@@ -1143,11 +1226,17 @@ class _StockTabState extends State<StockTab> {
                                 (e.value['qty'] as num?)?.toDouble() ?? 0;
                             final ts = e.value['timestamp'] as String?;
                             final timeStr = formatTime(ts);
+                            final bags = e.value['bags'] as List<dynamic>? ?? [];
+                            final bagStr = bags
+                                .map((b) =>
+                                    '${b['bagSize']}kg × ${b['bags']} bag${(b['bags'] as int? ?? 0) > 1 ? 's' : ''}')
+                                .join('  •  ');
                             return _logRow(
                               index: e.key + 1,
                               isIn: true,
-                              mainText: '+${fmt.format(qty)} kgs received',
-                              subText: timeStr.isNotEmpty ? timeStr : null,
+                              mainText: '+${_fmt.format(qty)} kgs received',
+                              subText: bagStr.isNotEmpty ? bagStr : null,
+                              timeText: timeStr.isNotEmpty ? timeStr : null,
                               color: Colors.green[700]!,
                               bgColor: Colors.green[50]!,
                               borderColor: Colors.green[100]!,
@@ -1181,7 +1270,7 @@ class _StockTabState extends State<StockTab> {
                             return _logRow(
                               index: e.key + 1,
                               isIn: false,
-                              mainText: '-${fmt.format(totalQty)} kgs sold',
+                              mainText: '-${_fmt.format(totalQty)} kgs sold',
                               subText: bagStr.isNotEmpty ? bagStr : null,
                               timeText: timeStr.isNotEmpty ? timeStr : null,
                               color: Colors.orange[700]!,
@@ -1237,7 +1326,7 @@ class _StockTabState extends State<StockTab> {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: color),
@@ -1253,7 +1342,7 @@ class _StockTabState extends State<StockTab> {
           padding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text('$count entr${count == 1 ? 'y' : 'ies'}',
@@ -1384,56 +1473,7 @@ class _StockTabState extends State<StockTab> {
     );
   }
 
-  /// Aggregates total bags sold per bag size from all outEntries
-  Map<int, int> _aggregateBags(String itemId) {
-    final entry = _stockEntries[itemId] ?? {};
-    final outEntries = entry['outEntries'] as List<dynamic>? ?? [];
-    final Map<int, int> totals = {};
-    for (final out in outEntries) {
-      final bags = out['bags'] as List<dynamic>? ?? [];
-      for (final b in bags) {
-        final size = (b['bagSize'] as num?)?.toInt() ?? 0;
-        final count = (b['bags'] as num?)?.toInt() ?? 0;
-        if (size > 0 && count > 0) {
-          totals[size] = (totals[size] ?? 0) + count;
-        }
-      }
-    }
-    return totals;
-  }
 
-  Widget _statCol(String label, String value, Color color,
-      {bool bold = false}) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[500],
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 12,
-                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                color: color),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _vertDivider() {
-    return Container(
-      width: 1,
-      height: 32,
-      color: Colors.grey[200],
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-    );
-  }
 
   Widget _minimalStat(String label, String value, {bool isBold = false}) {
     return Expanded(
@@ -1472,32 +1512,4 @@ class _StockTabState extends State<StockTab> {
     );
   }
 
-  Widget _statBox(
-      String label, String value, Color textColor, Color bgColor) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: textColor.withOpacity(0.75),
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(value,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: textColor)),
-          ],
-        ),
-      ),
-    );
-  }
 }

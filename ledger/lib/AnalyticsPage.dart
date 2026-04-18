@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
@@ -581,7 +581,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget _buildOverviewTab() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+        child: CircularProgressIndicator(color: Color(0xFF455A64)),
       );
     }
 
@@ -608,7 +608,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(
-                  color: Color(0xFF1976D2),
+                  color: Color(0xFF455A64),
                   width: 2,
                 ),
               ),
@@ -668,7 +668,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget _buildCustomersTab() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+        child: CircularProgressIndicator(color: Color(0xFF455A64)),
       );
     }
 
@@ -724,7 +724,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                     height: 36,
                     decoration: BoxDecoration(
                       color: customer['type'] == 'Retail'
-                          ? const Color(0xFF1976D2).withOpacity(0.1)
+                          ? const Color(0xFF455A64).withOpacity(0.1)
                           : const Color(0xFF388E3C).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -734,7 +734,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                             ? Icons.person
                             : Icons.business,
                         color: customer['type'] == 'Retail'
-                            ? const Color(0xFF1976D2)
+                            ? const Color(0xFF455A64)
                             : const Color(0xFF388E3C),
                         size: 18,
                       ),
@@ -759,7 +759,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                           style: TextStyle(
                             fontSize: 12,
                             color: customer['type'] == 'Retail'
-                                ? const Color(0xFF1976D2)
+                                ? const Color(0xFF455A64)
                                 : const Color(0xFF388E3C),
                             fontWeight: FontWeight.w500,
                           ),
@@ -788,7 +788,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget _buildTransactionsTab() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+        child: CircularProgressIndicator(color: Color(0xFF455A64)),
       );
     }
 
@@ -920,7 +920,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget _buildPerformanceTab() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+        child: CircularProgressIndicator(color: Color(0xFF455A64)),
       );
     }
 
@@ -1058,7 +1058,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.filter_alt, size: 20, color: Color(0xFF1976D2)),
+                  const Icon(Icons.filter_alt, size: 20, color: Color(0xFF455A64)),
                   const SizedBox(width: 8),
                   const Text(
                     'Filter by Date',
@@ -1114,7 +1114,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         child: Row(
                           children: [
                             const Icon(Icons.calendar_today,
-                                size: 18, color: Color(0xFF1976D2)),
+                                size: 18, color: Color(0xFF455A64)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -1161,7 +1161,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         child: Row(
                           children: [
                             const Icon(Icons.calendar_today,
-                                size: 18, color: Color(0xFF1976D2)),
+                                size: 18, color: Color(0xFF455A64)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -1191,7 +1191,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         Expanded(
           child: _isLoadingBills
               ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF1976D2)),
+                  child: CircularProgressIndicator(color: Color(0xFF455A64)),
                 )
               : _allBills.isEmpty
                   ? Center(
@@ -1251,7 +1251,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                               child: Padding(
                                 padding: EdgeInsets.all(16.0),
                                 child: CircularProgressIndicator(
-                                  color: Color(0xFF1976D2),
+                                  color: Color(0xFF455A64),
                                 ),
                               ),
                             );
@@ -1422,8 +1422,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1976D2),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1445,13 +1446,14 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
           child: Container(
-            color: const Color(0xFF1976D2),
+            color: Colors.white,
             child: TabBar(
               controller: _tabController,
-              indicatorColor: Colors.white,
+              indicatorColor: const Color(0xFF455A64),
               indicatorWeight: 3,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white70,
+              labelColor: const Color(0xFF455A64),
+              unselectedLabelColor: Colors.grey,
+              dividerColor: const Color(0xFFE8EAED),
               labelStyle: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1748,7 +1750,7 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
                             : const Icon(Icons.download, size: 18),
                         label: const Text('Download'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1976D2),
+                          backgroundColor: const Color(0xFF455A64),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../CustomerList.dart';
 import '../ledgerlist.dart';
 import '../Settings.dart';
@@ -47,7 +47,7 @@ class AppBottomBar extends StatelessWidget {
         BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
       ],
       currentIndex: currentIndex,
-      selectedItemColor: const Color(0xFF4285F4),
+      selectedItemColor: const Color(0xFF455A64),
       unselectedItemColor: Colors.grey,
       onTap: (index) => _onItemTapped(context, index),
       type: BottomNavigationBarType.fixed,

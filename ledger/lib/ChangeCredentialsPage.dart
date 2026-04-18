@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
@@ -174,7 +174,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                 Navigator.pop(context); // Go back to settings
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4285F4),
+                backgroundColor: const Color(0xFF455A64),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -248,7 +248,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
-        prefixIcon: Icon(icon, color: const Color(0xFF4285F4)),
+        prefixIcon: Icon(icon, color: const Color(0xFF455A64)),
         suffixIcon: onToggleVisibility != null
             ? IconButton(
                 icon: Icon(
@@ -270,7 +270,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -297,16 +297,9 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
         backgroundColor: Colors.white,
         appBar: AppBar(
           elevation: 0,
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1A1A2E),
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Change Credentials',
             style: TextStyle(
@@ -409,7 +402,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _verifyCurrentPassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4285F4),
+                        backgroundColor: const Color(0xFF455A64),
                         foregroundColor: Colors.white,
                         elevation: 2,
                         shape: RoundedRectangleBorder(
@@ -518,9 +511,9 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.05),
+                      color: const Color(0xFF455A64).withOpacity(0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      border: Border.all(color: const Color(0xFF455A64).withOpacity(0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -529,7 +522,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                           children: [
                             Icon(
                               Icons.info_outline,
-                              color: Colors.blue[700],
+                              color: const Color(0xFF455A64),
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -538,7 +531,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.blue[700],
+                                color: const Color(0xFF455A64),
                               ),
                             ),
                           ],

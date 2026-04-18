@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -282,7 +282,7 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
       ),
       child: Row(
         children: [
-          Icon(Icons.store, color: const Color(0xFF4285F4), size: 20),
+          Icon(Icons.store, color: const Color(0xFF455A64), size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButton<String>(
@@ -337,7 +337,7 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
               hintText: 'Search by date...',
               filled: true,
               fillColor: Colors.grey[50],
-              prefixIcon: const Icon(Icons.search, color: Color(0xFF4285F4)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF455A64)),
               suffixIcon: _searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 20),
@@ -357,7 +357,7 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(
-                  color: Color(0xFF4285F4),
+                  color: Color(0xFF455A64),
                   width: 2,
                 ),
               ),
@@ -668,16 +668,9 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1976D2), Color(0xFF4285F4)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Manage Ledgers',
           style: TextStyle(

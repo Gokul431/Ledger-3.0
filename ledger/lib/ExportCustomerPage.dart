@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -74,7 +74,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF4285F4)),
+            colorScheme: const ColorScheme.light(primary: Color(0xFF455A64)),
           ),
           child: child!,
         );
@@ -424,8 +424,8 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                       label: const Text('Open'),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: Color(0xFF4285F4)),
-                        foregroundColor: const Color(0xFF4285F4),
+                        side: const BorderSide(color: Color(0xFF455A64)),
+                        foregroundColor: const Color(0xFF455A64),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -463,7 +463,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                       label: const Text('Share'),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: const Color(0xFF4285F4),
+                        backgroundColor: const Color(0xFF455A64),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -627,7 +627,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue[50],
+        color: const Color(0xFFECEFF1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -635,7 +635,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.date_range, color: Colors.blue[700], size: 22),
+              Icon(Icons.date_range, color: const Color(0xFF455A64), size: 22),
               const SizedBox(width: 10),
               Text(
                 'Date Range',
@@ -677,7 +677,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                             Icon(
                               Icons.calendar_today,
                               size: 16,
-                              color: Colors.blue[700],
+                              color: const Color(0xFF455A64),
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -722,7 +722,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                             Icon(
                               Icons.calendar_today,
                               size: 16,
-                              color: Colors.blue[700],
+                              color: const Color(0xFF455A64),
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -837,8 +837,9 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        backgroundColor: const Color(0xFF4285F4),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF1A1A2E),
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: const Text(
           'Export Reports',
@@ -877,7 +878,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                 title: 'Customer Statement',
                 description:
                     'Individual transaction history with opening and closing balance',
-                iconColor: const Color(0xFF4285F4),
+                iconColor: const Color(0xFF455A64),
                 exportOptions: [
                   {
                     'format': 'PDF',
@@ -940,13 +941,13 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.blue[50],
+                  color: const Color(0xFFECEFF1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue[700], size: 22),
+                    Icon(Icons.info_outline, color: const Color(0xFF455A64), size: 22),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -957,7 +958,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: Colors.blue[900],
+                              color: const Color(0xFF263238),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -968,7 +969,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                             '• Select specific or all customers',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.blue[800],
+                              color: const Color(0xFF455A64),
                               height: 1.5,
                             ),
                           ),
@@ -998,7 +999,7 @@ class _ExportCustomerPageState extends State<ExportCustomerPage> {
                     children: [
                       const CircularProgressIndicator(
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF4285F4),
+                          Color(0xFF455A64),
                         ),
                       ),
                       const SizedBox(height: 20),
