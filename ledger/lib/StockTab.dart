@@ -926,14 +926,37 @@ class _StockTabState extends State<StockTab> {
                                       .map((s) => '$s×${bagTotals[s]}')
                                       .join(',  '));
                           final canAct = !_isStockClosed && !widget.isLedgerClosed;
+                          final hasOut = outEntries.isNotEmpty;
+                          final canView = !canAct && hasOut;
                           return GestureDetector(
-                            onTap: canAct ? () => _showOutDialog(itemId, itemName) : null,
+                            onTap: canAct
+                                ? () => _showOutDialog(itemId, itemName)
+                                : canView
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => StockOutPage(
+                                              itemName: itemName,
+                                              available: currentStock,
+                                              bagSizes: bagTotals.isNotEmpty
+                                                  ? kBagSizes
+                                                      .where((s) => bagTotals.containsKey(s))
+                                                      .toList()
+                                                  : kBagSizes,
+                                              initialBags: bagTotals,
+                                              isViewMode: true,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    : null,
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(
                                 color: Colors.red.shade50,
                                 borderRadius: BorderRadius.circular(8),
-                                border: canAct ? Border.all(color: Colors.red.shade200) : null,
+                                border: (canAct || canView) ? Border.all(color: Colors.red.shade200) : null,
                               ),
                               child: Row(
                                 children: [
@@ -948,7 +971,7 @@ class _StockTabState extends State<StockTab> {
                                         overflow: TextOverflow.ellipsis,
                                         textAlign: TextAlign.right),
                                   ),
-                                  if (canAct) ...[
+                                  if (canAct || canView) ...[
                                     const SizedBox(width: 6),
                                     Icon(Icons.chevron_right, size: 16, color: Colors.red.shade400),
                                   ],
@@ -968,15 +991,15 @@ class _StockTabState extends State<StockTab> {
                             final qty = (e['qty'] as num?)?.toDouble() ?? 0;
                             final bags = e['bags'] as List<dynamic>? ?? [];
                             if (bags.isNotEmpty) {
+                              final Map<int, int> sizeMap = {};
+                              for (final b in bags) {
+                                final sz = (b['bagSize'] as num?)?.toInt() ?? 0;
+                                final cnt = (b['bags'] as num?)?.toInt() ?? 0;
+                                if (sz > 0 && cnt > 0) sizeMap[sz] = (sizeMap[sz] ?? 0) + cnt;
+                              }
                               final s = kBagSizes
-                                  .where((sz) => bags.any((b) =>
-                                      (b['bagSize'] as num?)?.toInt() == sz &&
-                                      ((b['bags'] as num?)?.toInt() ?? 0) > 0))
-                                  .map((sz) {
-                                    final b = bags.firstWhere(
-                                        (b) => (b['bagSize'] as num?)?.toInt() == sz);
-                                    return '$sz×${(b['bags'] as num?)?.toInt() ?? 0}';
-                                  })
+                                  .where((sz) => sizeMap.containsKey(sz))
+                                  .map((sz) => '$sz×${sizeMap[sz]}')
                                   .join(', ');
                               return s.isNotEmpty ? s : '+${_fmt.format(qty)} kg';
                             }

@@ -365,12 +365,16 @@ class StockOutPage extends StatefulWidget {
   final String itemName;
   final double available;
   final List<int> bagSizes;
+  final Map<int, int>? initialBags;
+  final bool isViewMode;
 
   const StockOutPage({
     super.key,
     required this.itemName,
     required this.available,
     required this.bagSizes,
+    this.initialBags,
+    this.isViewMode = false,
   });
 
   @override
@@ -385,6 +389,12 @@ class _StockOutPageState extends State<StockOutPage> {
     super.initState();
     _controllers = List.generate(
         widget.bagSizes.length, (_) => TextEditingController());
+    if (widget.initialBags != null) {
+      for (int i = 0; i < widget.bagSizes.length; i++) {
+        final count = widget.initialBags![widget.bagSizes[i]] ?? 0;
+        if (count > 0) _controllers[i].text = '$count';
+      }
+    }
   }
 
   @override
@@ -443,8 +453,9 @@ class _StockOutPageState extends State<StockOutPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Stock Sold',
-                style: TextStyle(
+            Text(
+                widget.isViewMode ? 'Closing Stock' : 'Stock Sold',
+                style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Colors.black87)),
@@ -553,6 +564,7 @@ class _StockOutPageState extends State<StockOutPage> {
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly
                             ],
+                            readOnly: widget.isViewMode,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 fontSize: 16,
@@ -563,7 +575,9 @@ class _StockOutPageState extends State<StockOutPage> {
                               hintStyle: TextStyle(
                                   fontSize: 16, color: Colors.grey[300]),
                               filled: true,
-                              fillColor: const Color(0xFFF5F6FA),
+                              fillColor: widget.isViewMode
+                                  ? Colors.grey[100]
+                                  : const Color(0xFFF5F6FA),
                               contentPadding: const EdgeInsets.symmetric(
                                   vertical: 10, horizontal: 8),
                               border: OutlineInputBorder(
@@ -582,7 +596,9 @@ class _StockOutPageState extends State<StockOutPage> {
                                     color: Color(0xFF455A64), width: 2),
                               ),
                             ),
-                            onChanged: (_) => setState(() {}),
+                            onChanged: widget.isViewMode
+                                ? null
+                                : (_) => setState(() {}),
                           ),
                         ),
                         // Total kgs
@@ -662,7 +678,8 @@ class _StockOutPageState extends State<StockOutPage> {
             ),
           ),
 
-          // ── Submit button ──
+          // ── Submit button (hidden in view mode) ──
+          if (!widget.isViewMode)
           Container(
             color: Colors.white,
             padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
