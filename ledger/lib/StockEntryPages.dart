@@ -19,6 +19,9 @@ class StockInPage extends StatefulWidget {
   final double openingStock;
   final double totalIn;
   final double totalOut;
+  final List<Map<String, dynamic>>? initialBags;
+  final bool isViewMode;
+  final int? loadNumber;
 
   const StockInPage({
     super.key,
@@ -26,6 +29,9 @@ class StockInPage extends StatefulWidget {
     required this.openingStock,
     required this.totalIn,
     required this.totalOut,
+    this.initialBags,
+    this.isViewMode = false,
+    this.loadNumber,
   });
 
   @override
@@ -43,6 +49,18 @@ class _StockInPageState extends State<StockInPage> {
     super.initState();
     _controllers =
         List.generate(kBagSizes.length, (_) => TextEditingController());
+    // Pre-fill controllers if viewing an existing load
+    if (widget.initialBags != null) {
+      for (int i = 0; i < kBagSizes.length; i++) {
+        final size = kBagSizes[i];
+        final match = widget.initialBags!.where(
+            (b) => (b['bagSize'] as num?)?.toInt() == size).firstOrNull;
+        if (match != null) {
+          final count = (match['bags'] as num?)?.toInt() ?? 0;
+          if (count > 0) _controllers[i].text = '$count';
+        }
+      }
+    }
   }
 
   @override
@@ -98,8 +116,11 @@ class _StockInPageState extends State<StockInPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('New Stock',
-                style: TextStyle(
+            Text(
+                widget.isViewMode
+                    ? 'Load ${widget.loadNumber ?? ''}'
+                    : 'New Stock',
+                style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Colors.black87)),
@@ -208,6 +229,7 @@ class _StockInPageState extends State<StockInPage> {
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly
                             ],
+                            readOnly: widget.isViewMode,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 fontSize: 16,
@@ -218,7 +240,9 @@ class _StockInPageState extends State<StockInPage> {
                               hintStyle: TextStyle(
                                   fontSize: 16, color: Colors.grey[300]),
                               filled: true,
-                              fillColor: const Color(0xFFF5F6FA),
+                              fillColor: widget.isViewMode
+                                  ? Colors.grey[100]
+                                  : const Color(0xFFF5F6FA),
                               contentPadding: const EdgeInsets.symmetric(
                                   vertical: 10, horizontal: 8),
                               border: OutlineInputBorder(
@@ -237,7 +261,9 @@ class _StockInPageState extends State<StockInPage> {
                                     color: Color(0xFF455A64), width: 2),
                               ),
                             ),
-                            onChanged: (_) => setState(() {}),
+                            onChanged: widget.isViewMode
+                                ? null
+                                : (_) => setState(() {}),
                           ),
                         ),
                         // Total kgs
@@ -290,34 +316,35 @@ class _StockInPageState extends State<StockInPage> {
             ),
           ),
 
-          // ── Submit button ──
-          Container(
-            color: Colors.white,
-            padding:
-                EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: totalIn > 0 ? _submit : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF455A64),
-                  disabledBackgroundColor: Colors.grey[200],
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: Text(
-                  totalIn > 0
-                      ? 'Add ${fmt.format(totalIn)} kg'
-                      : 'Enter Bag Quantities',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700),
+          // ── Submit button (hidden in view mode) ──
+          if (!widget.isViewMode)
+            Container(
+              color: Colors.white,
+              padding:
+                  EdgeInsets.fromLTRB(16, 12, 16, 12 + bottom),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: totalIn > 0 ? _submit : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF455A64),
+                    disabledBackgroundColor: Colors.grey[200],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    totalIn > 0
+                        ? 'Add ${fmt.format(totalIn)} kg'
+                        : 'Enter Bag Quantities',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

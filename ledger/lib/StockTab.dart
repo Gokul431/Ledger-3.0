@@ -840,7 +840,7 @@ class _StockTabState extends State<StockTab> {
                                 ],
                               ),
                             ),
-                            if (salesValue > 0)
+                            if (_isStockClosed && salesValue > 0)
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
@@ -884,7 +884,7 @@ class _StockTabState extends State<StockTab> {
                               _statDivider(),
                               _minimalStat('CLOSING', '-${_fmt.format(totalOut)}kg'),
                               _statDivider(),
-                              _minimalStat('SOLD', '${_fmt.format(currentStock)}kg', isBold: true),
+                              _minimalStat('SOLD', _isStockClosed ? '${_fmt.format(currentStock)}kg' : '0kg', isBold: true),
                             ],
                           ),
                         ),
@@ -916,12 +916,15 @@ class _StockTabState extends State<StockTab> {
                         const SizedBox(height: 12),
                         Builder(builder: (_) {
                           final bagTotals = _aggregateBags(itemId);
-                          final bagStr = bagTotals.isEmpty
-                              ? '${_fmt.format(currentStock)} kg'
-                              : kBagSizes
-                                  .where((s) => bagTotals.containsKey(s))
-                                  .map((s) => '$s×${bagTotals[s]}')
-                                  .join(',  ');
+                          final outEntries = (entry['outEntries'] as List<dynamic>?) ?? [];
+                          final bagStr = outEntries.isEmpty
+                              ? '0 kg'
+                              : (bagTotals.isEmpty
+                                  ? '${_fmt.format(currentStock)} kg'
+                                  : kBagSizes
+                                      .where((s) => bagTotals.containsKey(s))
+                                      .map((s) => '$s×${bagTotals[s]}')
+                                      .join(',  '));
                           final canAct = !_isStockClosed && !widget.isLedgerClosed;
                           return GestureDetector(
                             onTap: canAct ? () => _showOutDialog(itemId, itemName) : null,
@@ -955,59 +958,168 @@ class _StockTabState extends State<StockTab> {
                           );
                         }),
 
-                        // ── Stock IN — always shown, tappable to add stock ──
+                        // ── Stock IN — one row per load, up to 5 loads ──
                         const SizedBox(height: 8),
                         Builder(builder: (_) {
                           final canAct = !_isStockClosed && !widget.isLedgerClosed;
-                          final inText = inEntries.isEmpty
-                              ? 'Tap to add new stock'
-                              : 'N.S  ${inEntries.map((e) {
-                                  final qty = (e['qty'] as num?)?.toDouble() ?? 0;
-                                  final bags = e['bags'] as List<dynamic>? ?? [];
-                                  if (bags.isNotEmpty) {
-                                    final bagStr = kBagSizes
-                                        .where((s) => bags.any((b) => (b['bagSize'] as num?)?.toInt() == s && ((b['bags'] as num?)?.toInt() ?? 0) > 0))
-                                        .map((s) {
-                                          final b = bags.firstWhere((b) => (b['bagSize'] as num?)?.toInt() == s);
-                                          return '$s×${(b['bags'] as num?)?.toInt() ?? 0}';
-                                        })
-                                        .join(', ');
-                                    return bagStr.isNotEmpty ? bagStr : '+${_fmt.format(qty)} kg';
-                                  }
-                                  return '+${_fmt.format(qty)} kg';
-                                }).join('   ')}';
-                          return GestureDetector(
-                            onTap: canAct ? () => _showInDialog(itemId, itemName) : null,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                                border: canAct ? Border.all(color: Colors.green.shade200) : null,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.add_circle_outline, size: 16, color: Colors.green.shade700),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      inText,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: inEntries.isEmpty ? Colors.green.shade400 : Colors.green.shade800,
-                                        fontStyle: inEntries.isEmpty ? FontStyle.italic : FontStyle.normal,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
+                          final canAddMore = canAct && inEntries.length < 5;
+
+                          String loadBagStr(dynamic e) {
+                            final qty = (e['qty'] as num?)?.toDouble() ?? 0;
+                            final bags = e['bags'] as List<dynamic>? ?? [];
+                            if (bags.isNotEmpty) {
+                              final s = kBagSizes
+                                  .where((sz) => bags.any((b) =>
+                                      (b['bagSize'] as num?)?.toInt() == sz &&
+                                      ((b['bags'] as num?)?.toInt() ?? 0) > 0))
+                                  .map((sz) {
+                                    final b = bags.firstWhere(
+                                        (b) => (b['bagSize'] as num?)?.toInt() == sz);
+                                    return '$sz×${(b['bags'] as num?)?.toInt() ?? 0}';
+                                  })
+                                  .join(', ');
+                              return s.isNotEmpty ? s : '+${_fmt.format(qty)} kg';
+                            }
+                            return '+${_fmt.format(qty)} kg';
+                          }
+
+                          return Column(
+                            children: [
+                              // Empty state — no loads yet
+                              if (inEntries.isEmpty && canAct)
+                                GestureDetector(
+                                  onTap: () => _showInDialog(itemId, itemName),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.green.shade200),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.add_circle_outline,
+                                            size: 16, color: Colors.green.shade400),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            'Tap to add new stock',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.green.shade400,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                        Icon(Icons.chevron_right,
+                                            size: 16, color: Colors.green.shade400),
+                                      ],
                                     ),
                                   ),
-                                  if (canAct) ...[
-                                    const SizedBox(width: 6),
-                                    Icon(Icons.chevron_right, size: 16, color: Colors.green.shade400),
-                                  ],
-                                ],
-                              ),
-                            ),
+                                ),
+
+                              // One row per existing load
+                              ...inEntries.asMap().entries.map((entry) {
+                                final i = entry.key;
+                                final e = entry.value;
+                                final bags = (e['bags'] as List<dynamic>?)
+                                    ?.cast<Map<String, dynamic>>();
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => StockInPage(
+                                            itemName: itemName,
+                                            openingStock: openingStock,
+                                            totalIn: totalIn,
+                                            totalOut: totalOut,
+                                            initialBags: bags,
+                                            isViewMode: true,
+                                            loadNumber: i + 1,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border:
+                                            Border.all(color: Colors.green.shade200),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.check_circle_outline,
+                                              size: 16, color: Colors.green.shade700),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'N.S ${i + 1}',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.green.shade700),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              loadBagStr(e),
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: Colors.green.shade800,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          Icon(Icons.chevron_right,
+                                              size: 16, color: Colors.green.shade400),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+
+                              // + Add Load button (shown when loads exist and can add more)
+                              if (canAddMore && inEntries.isNotEmpty)
+                                GestureDetector(
+                                  onTap: () => _showInDialog(itemId, itemName),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Colors.green.shade300,
+                                          style: BorderStyle.solid),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.add,
+                                            size: 16, color: Colors.green.shade700),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '+ Load ${inEntries.length + 1}',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
                           );
                         }),
                       ],
