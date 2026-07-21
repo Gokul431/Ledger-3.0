@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
@@ -30,7 +30,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   List<Map<String, dynamic>> _recentTransactions = [];
   List<Map<String, dynamic>> _dailyBalances = [];
   List<Map<String, dynamic>> _topCustomers = [];
-  
+
   // Bills Data
   List<Map<String, dynamic>> _allBills = [];
   DateTime? _selectedStartDate;
@@ -67,7 +67,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         final collectionName = data['collectionName'] ?? '';
 
         // ✅ Fetch shop name from the actual shop collection's Credentials document
@@ -161,7 +161,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in datesSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         final closingBalance = (data['closingBalance'] ?? 0).toDouble();
         final openingBalance = (data['openingBalance'] ?? 0).toDouble();
         final status = data['status'] ?? '';
@@ -227,7 +227,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in customerSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         final customerType = data['customerType'] ?? '';
         final openingAmount = (data['openingAmount'] ?? 0).toDouble();
         final customerName = data['customerName'] ?? 'Unknown';
@@ -298,7 +298,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in transactionSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         final amount = (data['amount'] ?? 0).toDouble();
         final isCredit = data['isCredit'] ?? false;
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
@@ -370,7 +370,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in transactionSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         transactions.add({
           'id': doc.id,
           'amount': data['amount'] ?? 0,
@@ -406,7 +406,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in datesSnapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         balances.add({
           'date': data['ledgerDate'] ?? doc.id,
           'opening': data['openingBalance'] ?? 0,
@@ -463,7 +463,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       for (var doc in snapshot.docs) {
         final data = doc.data() as Map<String, dynamic>?;
         if (data == null) continue;
-        
+
         final billPhotoUrl = data['billPhotoUrl'] as String?;
 
         if (billPhotoUrl != null && billPhotoUrl.isNotEmpty) {
@@ -472,14 +472,27 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           // Apply date filter in memory
           bool shouldInclude = true;
           if (_selectedStartDate != null && createdAt != null) {
-            if (createdAt.isBefore(DateTime(_selectedStartDate!.year,
-                _selectedStartDate!.month, _selectedStartDate!.day))) {
+            if (createdAt.isBefore(
+              DateTime(
+                _selectedStartDate!.year,
+                _selectedStartDate!.month,
+                _selectedStartDate!.day,
+              ),
+            )) {
               shouldInclude = false;
             }
           }
           if (shouldInclude && _selectedEndDate != null && createdAt != null) {
-            if (createdAt.isAfter(DateTime(_selectedEndDate!.year,
-                _selectedEndDate!.month, _selectedEndDate!.day, 23, 59, 59))) {
+            if (createdAt.isAfter(
+              DateTime(
+                _selectedEndDate!.year,
+                _selectedEndDate!.month,
+                _selectedEndDate!.day,
+                23,
+                59,
+                59,
+              ),
+            )) {
               shouldInclude = false;
             }
           }
@@ -636,7 +649,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Current Balance',
-          value: _formatCurrency((_ledgerStats['currentBalance'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_ledgerStats['currentBalance'] ?? 0).toDouble(),
+          ),
           subtitle: 'Latest ledger balance',
         ),
         const SizedBox(height: 8),
@@ -689,13 +704,17 @@ class _AnalyticsPageState extends State<AnalyticsPage>
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Total Opening Amounts',
-          value: _formatCurrency((_customerStats['totalOpeningAmount'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_customerStats['totalOpeningAmount'] ?? 0).toDouble(),
+          ),
           subtitle: 'Sum of all customer opening amounts',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Average Opening Amount',
-          value: _formatCurrency((_customerStats['avgOpeningAmount'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_customerStats['avgOpeningAmount'] ?? 0).toDouble(),
+          ),
           subtitle: 'Per customer average',
         ),
         if (_topCustomers.isNotEmpty) ...[
@@ -768,7 +787,9 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                     ),
                   ),
                   Text(
-                    _formatCurrency((customer['openingAmount'] as num).toDouble()),
+                    _formatCurrency(
+                      (customer['openingAmount'] as num).toDouble(),
+                    ),
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -796,20 +817,25 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       children: [
         _buildMetricCard(
           label: 'This Month Credits',
-          value: _formatCurrency((_transactionStats['monthCredit'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_transactionStats['monthCredit'] ?? 0).toDouble(),
+          ),
           subtitle:
               '${_transactionStats['monthTransactions'] ?? 0} transactions',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'This Month Debits',
-          value: _formatCurrency((_transactionStats['monthDebit'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_transactionStats['monthDebit'] ?? 0).toDouble(),
+          ),
           subtitle: 'Monthly outflows',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'Monthly Net Flow',
-          value: ((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble() >= 0
+          value:
+              ((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble() >= 0
               ? '+${_formatCurrency(((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble())}'
               : '-${_formatCurrency(((_transactionStats['monthNetFlow'] ?? 0) as num).toDouble().abs())}',
           subtitle: 'This month performance',
@@ -928,14 +954,18 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       children: [
         _buildMetricCard(
           label: 'Average Daily Balance',
-          value: _formatCurrency((_ledgerStats['avgDailyBalance'] ?? 0).toDouble()),
+          value: _formatCurrency(
+            (_ledgerStats['avgDailyBalance'] ?? 0).toDouble(),
+          ),
           subtitle: 'Per day average closing balance',
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
           label: 'This Month Activity',
           value: '${_ledgerStats['thisMonthDays'] ?? 0} Days',
-          subtitle: _formatCurrency((_ledgerStats['thisMonthBalance'] ?? 0).toDouble()),
+          subtitle: _formatCurrency(
+            (_ledgerStats['thisMonthBalance'] ?? 0).toDouble(),
+          ),
         ),
         const SizedBox(height: 8),
         _buildMetricCard(
@@ -1058,7 +1088,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             children: [
               Row(
                 children: [
-                  const Icon(Icons.filter_alt, size: 20, color: Color(0xFF455A64)),
+                  const Icon(
+                    Icons.filter_alt,
+                    size: 20,
+                    color: Color(0xFF455A64),
+                  ),
                   const SizedBox(width: 8),
                   const Text(
                     'Filter by Date',
@@ -1113,14 +1147,18 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.calendar_today,
-                                size: 18, color: Color(0xFF455A64)),
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 18,
+                              color: Color(0xFF455A64),
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _selectedStartDate != null
-                                    ? DateFormat('dd-MMM-yyyy')
-                                        .format(_selectedStartDate!)
+                                    ? DateFormat(
+                                        'dd-MMM-yyyy',
+                                      ).format(_selectedStartDate!)
                                     : 'Start Date',
                                 style: TextStyle(
                                   fontSize: 13,
@@ -1160,14 +1198,18 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.calendar_today,
-                                size: 18, color: Color(0xFF455A64)),
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 18,
+                              color: Color(0xFF455A64),
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 _selectedEndDate != null
-                                    ? DateFormat('dd-MMM-yyyy')
-                                        .format(_selectedEndDate!)
+                                    ? DateFormat(
+                                        'dd-MMM-yyyy',
+                                      ).format(_selectedEndDate!)
                                     : 'End Date',
                                 style: TextStyle(
                                   fontSize: 13,
@@ -1194,73 +1236,73 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   child: CircularProgressIndicator(color: Color(0xFF455A64)),
                 )
               : _allBills.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.receipt_long,
-                              size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No bills found',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _selectedStartDate != null || _selectedEndDate != null
-                                ? 'Try adjusting your date filter'
-                                : 'Bills will appear here when transactions have photos',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[500],
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.receipt_long,
+                        size: 64,
+                        color: Colors.grey[400],
                       ),
-                    )
-                  : NotificationListener<ScrollNotification>(
-                      onNotification: (ScrollNotification scrollInfo) {
-                        if (!_isLoadingBills &&
-                            _hasMoreBills &&
-                            scrollInfo.metrics.pixels >=
-                                scrollInfo.metrics.maxScrollExtent - 200) {
-                          // Load more when scrolled near bottom (200px threshold)
-                          _loadBills(loadMore: true);
-                        }
-                        return false;
-                      },
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
+                      const SizedBox(height: 16),
+                      Text(
+                        'No bills found',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedStartDate != null || _selectedEndDate != null
+                            ? 'Try adjusting your date filter'
+                            : 'Bills will appear here when transactions have photos',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (ScrollNotification scrollInfo) {
+                    if (!_isLoadingBills &&
+                        _hasMoreBills &&
+                        scrollInfo.metrics.pixels >=
+                            scrollInfo.metrics.maxScrollExtent - 200) {
+                      // Load more when scrolled near bottom (200px threshold)
+                      _loadBills(loadMore: true);
+                    }
+                    return false;
+                  },
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.75,
                         ),
-                        itemCount: _allBills.length + (_hasMoreBills ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          // Show loading indicator at the end if more bills available
-                          if (index == _allBills.length) {
-                            return const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(16.0),
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF455A64),
-                                ),
-                              ),
-                            );
-                          }
-                          final bill = _allBills[index];
-                          return _buildBillCard(bill);
-                        },
-                      ),
-                    ),
+                    itemCount: _allBills.length + (_hasMoreBills ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Show loading indicator at the end if more bills available
+                      if (index == _allBills.length) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF455A64),
+                            ),
+                          ),
+                        );
+                      }
+                      final bill = _allBills[index];
+                      return _buildBillCard(bill);
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -1313,8 +1355,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                       return Container(
                         color: Colors.grey[200],
                         child: const Center(
-                          child: Icon(Icons.broken_image,
-                              size: 40, color: Colors.grey),
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
                         ),
                       );
                     },
@@ -1326,7 +1371,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                           child: CircularProgressIndicator(
                             value: loadingProgress.expectedTotalBytes != null
                                 ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
+                                      loadingProgress.expectedTotalBytes!
                                 : null,
                             strokeWidth: 2,
                           ),
@@ -1356,10 +1401,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   const SizedBox(height: 4),
                   Text(
                     description,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -1598,10 +1640,9 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
         setState(() => _isDownloading = false);
 
         if (mounted) {
-          await Share.shareXFiles(
-            [XFile(filePath)],
-            text: 'Bill for ${widget.transactionTitle}',
-          );
+          await Share.shareXFiles([
+            XFile(filePath),
+          ], text: 'Bill for ${widget.transactionTitle}');
         }
       } else {
         throw Exception('Failed to download image');
@@ -1626,6 +1667,7 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (context, scrollController) => Container(
+        width: double.infinity,
         decoration: const BoxDecoration(
           color: Colors.black,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1660,8 +1702,9 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
                         if (widget.createdAt != null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            DateFormat('dd MMM yyyy, hh:mm a')
-                                .format(widget.createdAt!),
+                            DateFormat(
+                              'dd MMM yyyy, hh:mm a',
+                            ).format(widget.createdAt!),
                             style: TextStyle(
                               color: Colors.grey[400],
                               fontSize: 12,
@@ -1692,7 +1735,9 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
                       if (loadingProgress == null) return child;
                       return const Center(
                         child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       );
                     },
@@ -1701,8 +1746,11 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.broken_image,
-                                size: 64, color: Colors.white54),
+                            Icon(
+                              Icons.broken_image,
+                              size: 64,
+                              color: Colors.white54,
+                            ),
                             SizedBox(height: 16),
                             Text(
                               'Failed to load image',
@@ -1743,8 +1791,9 @@ class _BillViewerBottomSheetState extends State<_BillViewerBottomSheet> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
                               )
                             : const Icon(Icons.download, size: 18),

@@ -55,16 +55,32 @@ class _StockAnalyticsPageState extends State<StockAnalyticsPage>
           .collection('list')
           .get();
 
-      final items = itemSnap.docs
-          .map((d) => _ItemMeta(
-                id: d.id,
-                name: (d.data()['itemName'] ?? '') as String,
-                price: (d.data()['price'] ?? 0).toDouble(),
-                isActive: d.data()['isActive'] ?? true,
-              ))
-          .where((i) => i.name.isNotEmpty)
-          .toList();
-      items.sort((a, b) => a.name.compareTo(b.name));
+      // Dedupe by stock key: two item docs can share the same 'itemId' (e.g.
+      // a typo'd duplicate entry). They'd point at the same stock-ledger
+      // history, so keeping both would double-count sales/qty and also
+      // crash the Trend tab's dropdown (two entries with an equal value).
+      final byKey = <String, _ItemMeta>{};
+      for (final d in itemSnap.docs) {
+        final data = d.data();
+        final name = (data['itemName'] ?? '') as String;
+        if (name.isEmpty) continue;
+        // Stock ledger entries are keyed by the item's 'itemId' field
+        // (set by the user, e.g. "DLX.OLD"), not this Firestore doc ID —
+        // mirrors StockTab's _itemStockKey. Falls back to doc.id only
+        // when itemId wasn't set.
+        final key = (data['itemId'] ?? '').toString().trim();
+        final id = key.isNotEmpty ? key : d.id;
+        byKey.putIfAbsent(
+            id,
+            () => _ItemMeta(
+                  id: id,
+                  name: name,
+                  price: (data['price'] ?? 0).toDouble(),
+                  isActive: data['isActive'] ?? true,
+                ));
+      }
+      final items = byKey.values.toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
 
       // 2. Build last-30-days date strings
       final today = DateTime.now();
@@ -532,6 +548,17 @@ class _TrendTabState extends State<_TrendTab> {
   void initState() {
     super.initState();
     _selectedItemId = widget.items.first.id;
+  }
+
+  @override
+  void didUpdateWidget(_TrendTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Guard against a refresh changing the item list (rename/delete) and
+    // leaving _selectedItemId pointing at something no longer in it — the
+    // dropdown requires its value to match exactly one item.
+    if (!widget.items.any((i) => i.id == _selectedItemId)) {
+      _selectedItemId = widget.items.first.id;
+    }
   }
 
   @override

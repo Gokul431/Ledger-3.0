@@ -34,9 +34,8 @@ class PDFExportService {
     }
   }
 
-  /// Generate PDF - PRIMARY: Uses cloud function, FALLBACK: Local generation
-  /// Cloud function (index.js) is the primary method for PDF generation
-  /// Local generation (this method) is used as backup if cloud function fails
+  /// Generate PDF via Firebase cloud function (primary — correct Tamil rendering via PDFKit+fontkit).
+  /// Local generation is the fallback but may not render Tamil combining marks correctly.
   static Future<Uint8List> generateLedgerPDF({
     required DateTime date,
     required String shopName,
@@ -47,9 +46,9 @@ class PDFExportService {
     required List<Map<String, dynamic>> transactions,
     required bool isLedgerClosed,
   }) async {
-    // ✅ PRIMARY: Try cloud function first
+    // PRIMARY: Cloud function — uses PDFKit + fontkit which applies Tamil GSUB shaping
     try {
-      debugPrint('🔄 Attempting to generate PDF via cloud function...');
+      debugPrint('🔄 Generating PDF via cloud function (Tamil font support)...');
       final pdfBytes = await _generatePDFViaCloudFunction(
         date: date,
         shopName: shopName,
@@ -64,7 +63,6 @@ class PDFExportService {
       return pdfBytes;
     } catch (e) {
       debugPrint('⚠️ Cloud function failed, falling back to local generation: $e');
-      // ✅ FALLBACK: Use local generation if cloud function fails
       return _generatePDFLocally(
         date: date,
         shopName: shopName,
@@ -274,271 +272,256 @@ class PDFExportService {
     });
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+        footer: (pw.Context context) => pw.Container(
+          alignment: pw.Alignment.center,
+          padding: const pw.EdgeInsets.only(top: 8),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.grey300),
+            ),
+          ),
+          child: pw.Column(
             children: [
-              // Header with pure Tamil support
-              pw.Center(
-                child: pw.Column(
-                  children: [
-                    pw.Text(
-                      shopName.toUpperCase(), // Pure Tamil text - no conversion
-                      style: pw.TextStyle(
-                        fontSize: 16,
-                        fontWeight: pw.FontWeight.bold,
-                        font: _containsTamilCharacters(shopName) 
-                            ? _getTamilFont(bold: true) 
-                            : null, // Use Tamil font if contains Tamil
-                      ),
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Ledger Report - Date: $ledgerDate',
-                      style: const pw.TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Transaction Details title
               pw.Text(
-                'Transaction Details',
+                '"Financial stability is the foundation of success. Track every rupee, plan every expense, grow exponentially."',
                 style: pw.TextStyle(
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 9,
+                  color: PdfColors.grey700,
+                  fontStyle: pw.FontStyle.italic,
                 ),
+                textAlign: pw.TextAlign.center,
               ),
-              pw.SizedBox(height: 8),
-
-              // ✅ Transaction table
-              pw.Table(
-                border: pw.TableBorder(
-                  top: pw.BorderSide(color: PdfColors.black, width: 0.8),
-                  bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
-                  horizontalInside: pw.BorderSide(
-                    color: PdfColors.grey400,
-                    width: 0.3,
-                  ),
-                ),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(
-                    1.8,
-                  ), // ✅ Increased from 1.2 to fit AM/PM
-                  1: const pw.FlexColumnWidth(2.5),
-                  2: const pw.FlexColumnWidth(1.5),
-                  3: const pw.FlexColumnWidth(1.5),
-                  4: const pw.FlexColumnWidth(1.5),
-                },
-                children: [
-                  // Header row
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(
-                      color: PdfColors.grey200,
-                    ),
-                    children: [
-                      _buildPDFCell(
-                        'Date',
-                        bold: true,
-                        align: pw.TextAlign.center,
-                      ),
-                      _buildPDFCell(
-                        'Particulars',
-                        bold: true,
-                        align: pw.TextAlign.center,
-                      ),
-                      _buildPDFCell(
-                        'Type',
-                        bold: true,
-                        align: pw.TextAlign.center,
-                      ),
-                      _buildPDFCell(
-                        'Credit (Rs)',
-                        bold: true,
-                        align: pw.TextAlign.center,
-                      ),
-                      _buildPDFCell(
-                        'Debit (Rs)',
-                        bold: true,
-                        align: pw.TextAlign.center,
-                      ),
-                    ],
-                  ),
-
-                  // Transaction rows
-                  ...allTransactions.map((tx) {
-                    final debitAmount = tx['debit'] as double;
-                    final creditAmount = tx['credit'] as double;
-                    final isGrandTotal = tx['particulars'] == 'GRAND TOTAL';
-                    final isSalesValue = tx['particulars'] == 'SALES VALUE';
-                    final isCashOut = tx['particulars'] == 'CASH OUT';
-                    final isOpeningBalance =
-                        tx['particulars'] == 'Opening Balance';
-                    final isBalanceDifference =
-                        tx['particulars'] == 'BALANCE DIFFERENCE';
-                    final isClosingBalance =
-                        tx['particulars'] == 'CLOSING BALANCE';
-                    final particulars = tx['particulars'] as String;
-                    final txDate = tx['date'] as String;
-                    final time = tx['time'] as String; // ✅ Get time
-
-                    return pw.TableRow(
-                      decoration:
-                          (isGrandTotal ||
-                              isSalesValue ||
-                              isCashOut ||
-                              isOpeningBalance ||
-                              isBalanceDifference ||
-                              isClosingBalance)
-                          ? const pw.BoxDecoration(color: PdfColors.grey100)
-                          : null,
-                      children: [
-                        // ✅ DATE COLUMN WITH TIME ON SAME LINE (with AM/PM)
-                        pw.Container(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(
-                            time.isNotEmpty ? '$txDate | $time' : txDate,
-                            style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight:
-                                  (isGrandTotal ||
-                                      isSalesValue ||
-                                      isCashOut ||
-                                      isBalanceDifference ||
-                                      isClosingBalance)
-                                  ? pw.FontWeight.bold
-                                  : pw.FontWeight.normal,
-                            ),
-                            textAlign: pw.TextAlign.center,
-                          ),
-                        ),
-                        _buildPDFCellWithTamil(
-                          particulars,
-                          align: pw.TextAlign.left,
-                          maxLines: 2,
-                          bold:
-                              isGrandTotal ||
-                              isSalesValue ||
-                              isCashOut ||
-                              isOpeningBalance ||
-                              isBalanceDifference ||
-                              isClosingBalance,
-                        ),
-                        _buildPDFCellWithTamil(
-                          tx['type'],
-                          align: pw.TextAlign.center,
-                          bold:
-                              isGrandTotal ||
-                              isSalesValue ||
-                              isCashOut ||
-                              isBalanceDifference ||
-                              isClosingBalance,
-                        ),
-                        // ✅ CREDIT COLUMN
-                        (isClosingBalance || isCashOut)
-                            ? pw.Container(
-                                padding: const pw.EdgeInsets.all(6),
-                                child: pw.Text(
-                                  creditAmount != 0
-                                      ? 'Rs ${NumberFormat('#,##,##0.00').format(creditAmount)}'
-                                      : 'Rs 0.00',
-                                  style: pw.TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: pw.FontWeight.bold,
-                                  ),
-                                  textAlign: pw.TextAlign.center,
-                                ),
-                              )
-                            : _buildPDFCell(
-                                creditAmount > 0
-                                    ? 'Rs ${NumberFormat('#,##,##0.00').format(creditAmount)}'
-                                    : '',
-                                align: pw.TextAlign.center,
-                                bold: isGrandTotal || isSalesValue || isCashOut,
-                              ),
-                        // ✅ DEBIT COLUMN - Balance Difference with color coding
-                        isBalanceDifference
-                            ? pw.Container(
-                                padding: const pw.EdgeInsets.all(6),
-                                child: pw.Text(
-                                  debitAmount != 0
-                                      ? 'Rs ${debitAmount < 0 ? '-' : ''}${NumberFormat('#,##,##0.00').format(debitAmount.abs())}'
-                                      : 'Rs 0.00',
-                                  style: pw.TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: pw.FontWeight.bold,
-                                    color: debitAmount > 0
-                                        ? PdfColors
-                                              .green // ✅ GREEN if positive
-                                        : debitAmount < 0
-                                        ? PdfColors
-                                              .red // ✅ RED if negative
-                                        : PdfColors.black, // ✅ BLACK if zero
-                                  ),
-                                  textAlign: pw.TextAlign.center,
-                                ),
-                              )
-                            : _buildPDFCell(
-                                debitAmount > 0
-                                    ? 'Rs ${NumberFormat('#,##,##0.00').format(debitAmount)}'
-                                    : '',
-                                align: pw.TextAlign.center,
-                                bold:
-                                    isGrandTotal ||
-                                    isSalesValue ||
-                                    isCashOut ||
-                                    isClosingBalance ||
-                                    isOpeningBalance,
-                              ),
-                      ],
-                    );
-                  }),
-                ],
-              ),
-
-              pw.Spacer(),
-
-              // ✅ Footer
-              pw.Container(
-                alignment: pw.Alignment.center,
-                margin: const pw.EdgeInsets.only(top: 15),
-                child: pw.Column(
-                  children: [
-                    pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                      decoration: const pw.BoxDecoration(
-                        border: pw.Border(
-                          top: pw.BorderSide(color: PdfColors.grey300),
-                          bottom: pw.BorderSide(color: PdfColors.grey300),
-                        ),
-                      ),
-                      child: pw.Text(
-                        '"Financial stability is the foundation of success. Track every rupee, plan every expense, grow exponentially."',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          color: PdfColors.grey700,
-                          fontStyle: pw.FontStyle.italic,
-                        ),
-                        textAlign: pw.TextAlign.center,
-                      ),
-                    ),
-                    pw.SizedBox(height: 5),
-                    pw.Text(
-                      'Powered by Ledger System',
-                      style: const pw.TextStyle(
-                        fontSize: 9,
-                        color: PdfColors.grey600,
-                      ),
-                    ),
-                  ],
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Powered by Ledger System',
+                style: const pw.TextStyle(
+                  fontSize: 8,
+                  color: PdfColors.grey600,
                 ),
               ),
             ],
-          );
+          ),
+        ),
+        build: (pw.Context context) {
+          return [
+            // Header with Tamil support
+            pw.Center(
+              child: pw.Column(
+                children: [
+                  pw.Text(
+                    shopName,
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                      font: _containsTamilCharacters(shopName)
+                          ? _getTamilFont(bold: true)
+                          : null,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Ledger Report - Date: $ledgerDate',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+
+            // Transaction Details title
+            pw.Text(
+              'Transaction Details',
+              style: pw.TextStyle(
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 8),
+
+            // Transaction table — MultiPage handles overflow across pages automatically
+            pw.Table(
+              border: pw.TableBorder(
+                top: pw.BorderSide(color: PdfColors.black, width: 0.8),
+                bottom: pw.BorderSide(color: PdfColors.black, width: 0.8),
+                horizontalInside: pw.BorderSide(
+                  color: PdfColors.grey400,
+                  width: 0.3,
+                ),
+              ),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.8),
+                1: const pw.FlexColumnWidth(2.5),
+                2: const pw.FlexColumnWidth(1.5),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FlexColumnWidth(1.5),
+              },
+              children: [
+                // Header row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                  ),
+                  children: [
+                    _buildPDFCell(
+                      'Date',
+                      bold: true,
+                      align: pw.TextAlign.center,
+                    ),
+                    _buildPDFCell(
+                      'Particulars',
+                      bold: true,
+                      align: pw.TextAlign.center,
+                    ),
+                    _buildPDFCell(
+                      'Type',
+                      bold: true,
+                      align: pw.TextAlign.center,
+                    ),
+                    _buildPDFCell(
+                      'Credit (Rs)',
+                      bold: true,
+                      align: pw.TextAlign.center,
+                    ),
+                    _buildPDFCell(
+                      'Debit (Rs)',
+                      bold: true,
+                      align: pw.TextAlign.center,
+                    ),
+                  ],
+                ),
+
+                // Transaction rows
+                ...allTransactions.map((tx) {
+                  final debitAmount = tx['debit'] as double;
+                  final creditAmount = tx['credit'] as double;
+                  final isGrandTotal = tx['particulars'] == 'GRAND TOTAL';
+                  final isSalesValue = tx['particulars'] == 'SALES VALUE';
+                  final isCashOut = tx['particulars'] == 'CASH OUT';
+                  final isOpeningBalance =
+                      tx['particulars'] == 'Opening Balance';
+                  final isBalanceDifference =
+                      tx['particulars'] == 'BALANCE DIFFERENCE';
+                  final isClosingBalance =
+                      tx['particulars'] == 'CLOSING BALANCE';
+                  final particulars = tx['particulars'] as String;
+                  final txDate = tx['date'] as String;
+                  final time = tx['time'] as String;
+
+                  return pw.TableRow(
+                    decoration:
+                        (isGrandTotal ||
+                            isSalesValue ||
+                            isCashOut ||
+                            isOpeningBalance ||
+                            isBalanceDifference ||
+                            isClosingBalance)
+                        ? const pw.BoxDecoration(color: PdfColors.grey100)
+                        : null,
+                    children: [
+                      // Date column with time
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text(
+                          time.isNotEmpty ? '$txDate | $time' : txDate,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight:
+                                (isGrandTotal ||
+                                    isSalesValue ||
+                                    isCashOut ||
+                                    isBalanceDifference ||
+                                    isClosingBalance)
+                                ? pw.FontWeight.bold
+                                : pw.FontWeight.normal,
+                          ),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                      _buildPDFCellWithTamil(
+                        particulars,
+                        align: pw.TextAlign.left,
+                        maxLines: 2,
+                        bold:
+                            isGrandTotal ||
+                            isSalesValue ||
+                            isCashOut ||
+                            isOpeningBalance ||
+                            isBalanceDifference ||
+                            isClosingBalance,
+                      ),
+                      _buildPDFCellWithTamil(
+                        tx['type'],
+                        align: pw.TextAlign.center,
+                        bold:
+                            isGrandTotal ||
+                            isSalesValue ||
+                            isCashOut ||
+                            isBalanceDifference ||
+                            isClosingBalance,
+                      ),
+                      // Credit column
+                      (isClosingBalance || isCashOut)
+                          ? pw.Container(
+                              padding: const pw.EdgeInsets.all(6),
+                              child: pw.Text(
+                                creditAmount != 0
+                                    ? 'Rs ${NumberFormat('#,##,##0.00').format(creditAmount)}'
+                                    : 'Rs 0.00',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            )
+                          : _buildPDFCell(
+                              creditAmount > 0
+                                  ? 'Rs ${NumberFormat('#,##,##0.00').format(creditAmount)}'
+                                  : '',
+                              align: pw.TextAlign.center,
+                              bold: isGrandTotal || isSalesValue || isCashOut,
+                            ),
+                      // Debit column — Balance Difference gets color coding
+                      isBalanceDifference
+                          ? pw.Container(
+                              padding: const pw.EdgeInsets.all(6),
+                              child: pw.Text(
+                                debitAmount != 0
+                                    ? 'Rs ${debitAmount < 0 ? '-' : ''}${NumberFormat('#,##,##0.00').format(debitAmount.abs())}'
+                                    : 'Rs 0.00',
+                                style: pw.TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: debitAmount > 0
+                                      ? PdfColors.green
+                                      : debitAmount < 0
+                                      ? PdfColors.red
+                                      : PdfColors.black,
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
+                            )
+                          : _buildPDFCell(
+                              debitAmount > 0
+                                  ? 'Rs ${NumberFormat('#,##,##0.00').format(debitAmount)}'
+                                  : '',
+                              align: pw.TextAlign.center,
+                              bold:
+                                  isGrandTotal ||
+                                  isSalesValue ||
+                                  isCashOut ||
+                                  isClosingBalance ||
+                                  isOpeningBalance,
+                            ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ];
         },
       ),
     );

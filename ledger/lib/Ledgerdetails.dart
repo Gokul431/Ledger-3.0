@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
@@ -501,13 +501,16 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     // Payment IN = DEBIT (isCredit = false) = GREEN
     // Payment OUT = CREDIT (isCredit = true) = RED
     final statusColor = isCredit ? Colors.red : Colors.green;
-    
+
     // Check if transaction has a bill
-    final hasBill = data['billPhotoUrl'] != null &&
+    final hasBill =
+        data['billPhotoUrl'] != null &&
         data['billPhotoUrl'].toString().isNotEmpty;
-    
+
     // Debug: Verify the logic
-    debugPrint('Transaction: $title, isCredit: $isCredit, Color: ${isCredit ? "RED" : "GREEN"}, Subtitle: $subtitle');
+    debugPrint(
+      'Transaction: $title, isCredit: $isCredit, Color: ${isCredit ? "RED" : "GREEN"}, Subtitle: $subtitle',
+    );
 
     return GestureDetector(
       // Allow long press for both admin and employee
@@ -516,7 +519,8 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       onLongPress: () {
         if (_isEmployeeLogin) {
           // Employee: Show bill viewer if bill exists, otherwise show restricted message
-          final hasBill = data['billPhotoUrl'] != null &&
+          final hasBill =
+              data['billPhotoUrl'] != null &&
               data['billPhotoUrl'].toString().isNotEmpty;
           if (hasBill) {
             _showEmployeeBillOptionsDialog(context, data);
@@ -641,18 +645,19 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       isScrollControlled: true,
       builder: (BuildContext context) {
         final screenHeight = MediaQuery.of(context).size.height;
-        final hasBill = data['billPhotoUrl'] != null &&
+        final hasBill =
+            data['billPhotoUrl'] != null &&
             data['billPhotoUrl'].toString().isNotEmpty;
         final optionCount = hasBill ? 3 : 2;
         final estimatedHeight = 150.0 + (optionCount * 72.0) + 32.0;
         final maxHeight = screenHeight * 0.6;
-        final sheetHeight = estimatedHeight > maxHeight ? maxHeight : estimatedHeight;
+        final sheetHeight = estimatedHeight > maxHeight
+            ? maxHeight
+            : estimatedHeight;
 
         return Container(
-          constraints: BoxConstraints(
-            maxHeight: maxHeight,
-            minHeight: 280,
-          ),
+          width: double.infinity,
+          constraints: BoxConstraints(maxHeight: maxHeight, minHeight: 280),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -674,7 +679,10 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
 
                 // Header - Fixed height
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -834,7 +842,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                       ),
 
                       // Bottom padding for safe area
-                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 16),
+                      SizedBox(
+                        height: MediaQuery.of(context).viewInsets.bottom + 16,
+                      ),
                     ],
                   ),
                 ),
@@ -1113,7 +1123,8 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     final title = _getTransactionTitle(data);
     final amount = (data['amount'] ?? 0).toDouble();
     final isCredit = data['isCredit'] ?? false;
-    final hasBill = data['billPhotoUrl'] != null &&
+    final hasBill =
+        data['billPhotoUrl'] != null &&
         data['billPhotoUrl'].toString().isNotEmpty;
 
     showModalBottomSheet(
@@ -1122,15 +1133,16 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       isScrollControlled: true,
       builder: (BuildContext context) {
         final screenHeight = MediaQuery.of(context).size.height;
-        final estimatedHeight = 150.0 + 72.0 + 32.0; // Header + View Bill option + padding
+        final estimatedHeight =
+            150.0 + 72.0 + 32.0; // Header + View Bill option + padding
         final maxHeight = screenHeight * 0.6;
-        final sheetHeight = estimatedHeight > maxHeight ? maxHeight : estimatedHeight;
+        final sheetHeight = estimatedHeight > maxHeight
+            ? maxHeight
+            : estimatedHeight;
 
         return Container(
-          constraints: BoxConstraints(
-            maxHeight: maxHeight,
-            minHeight: 280,
-          ),
+          width: double.infinity,
+          constraints: BoxConstraints(maxHeight: maxHeight, minHeight: 280),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1152,7 +1164,10 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
 
                 // Header - Fixed height
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1246,7 +1261,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                             'View Bill',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          subtitle: const Text('View, download and share bill photo'),
+                          subtitle: const Text(
+                            'View, download and share bill photo',
+                          ),
                           onTap: () {
                             Navigator.pop(context);
                             _viewBill(data['billPhotoUrl'].toString(), title);
@@ -1266,7 +1283,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         ),
 
                       // Bottom padding for safe area
-                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 16),
+                      SizedBox(
+                        height: MediaQuery.of(context).viewInsets.bottom + 16,
+                      ),
                     ],
                   ),
                 ),
@@ -1389,7 +1408,8 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   void _showEditClosingBalanceDialog() {
     if (_ledgerRef == null || _ledgerData == null) return;
 
-    final currentClosingBalance = (_ledgerData!['closingBalance'] ?? 0).toDouble();
+    final currentClosingBalance = (_ledgerData!['closingBalance'] ?? 0)
+        .toDouble();
     final TextEditingController amountController = TextEditingController(
       text: currentClosingBalance.toStringAsFixed(2),
     );
@@ -1451,7 +1471,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
               const SizedBox(height: 16),
               TextField(
                 controller: amountController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   labelText: 'New Closing Balance',
                   hintText: 'Enter amount',
@@ -1461,7 +1483,10 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF455A64),
+                      width: 2,
+                    ),
                   ),
                 ),
                 style: const TextStyle(
@@ -1494,9 +1519,12 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             ),
             ElevatedButton(
               onPressed: () {
-                final amountText = amountController.text.trim().replaceAll(',', '');
+                final amountText = amountController.text.trim().replaceAll(
+                  ',',
+                  '',
+                );
                 final newAmount = double.tryParse(amountText);
-                
+
                 if (newAmount == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -1980,34 +2008,124 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           unselectedLabelColor: Colors.grey,
           dividerColor: const Color(0xFFE8EAED),
           labelStyle: const TextStyle(
-            fontWeight: FontWeight.w800, 
+            fontWeight: FontWeight.w800,
             fontSize: 13,
             letterSpacing: 0.5,
           ),
           unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w600, 
+            fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
           tabs: const [
-            Tab(
-              icon: Icon(Icons.menu_book_rounded, size: 20), 
-              text: 'Ledger',
-              iconMargin: EdgeInsets.only(bottom: 6),
-            ),
-            Tab(
-              icon: Icon(Icons.inventory_2_rounded, size: 20), 
-              text: 'Stock',
-              iconMargin: EdgeInsets.only(bottom: 6),
-            ),
+            Tab(text: 'Ledger'),
+            Tab(text: 'Stock'),
           ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.lock_outline_rounded, size: isLandscape ? 22 : 24, color: const Color(0xFF455A64)),
+            icon: Icon(
+              Icons.lock_outline_rounded,
+              size: isLandscape ? 22 : 24,
+              color: const Color(0xFF455A64),
+            ),
             tooltip: "Close Ledger",
-            onPressed: () {
+            onPressed: () async {
+              final ctx = context;
+              final collection =
+                  _selectedShopCollection ?? widget.shopCollection;
+              if (collection != null) {
+                final dateStr = DateFormat('dd-MMM-yyyy').format(widget.date);
+                final stockDoc = await FirebaseFirestore.instance
+                    .collection(collection)
+                    .doc('stockLedger')
+                    .collection('dates')
+                    .doc(dateStr)
+                    .get();
+                // Block unless stock ledger is explicitly closed
+                final isClosed =
+                    stockDoc.exists && (stockDoc.data()?['isClosed'] == true);
+                if (!isClosed) {
+                  if (!mounted) return;
+                  showDialog(
+                    context: ctx,
+                    builder: (dialogCtx) => Dialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.lock_clock_outlined,
+                                color: Colors.orange.shade700,
+                                size: 32,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Stock Ledger Open',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1A1A2E),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Please close the stock ledger first before closing the day ledger.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => Navigator.pop(dialogCtx),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF455A64),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: const Text(
+                                  'Got it',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+              }
+              if (!mounted) return;
               Navigator.push(
-                context,
+                ctx,
                 MaterialPageRoute(
                   builder: (_) => CloseLedgerScreen(
                     date: widget.date,
@@ -2022,7 +2140,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
             },
           ),
           IconButton(
-            icon: Icon(Icons.add_circle_outline_rounded, size: isLandscape ? 24 : 26, color: const Color(0xFF455A64)),
+            icon: Icon(
+              Icons.add_circle_outline_rounded,
+              size: isLandscape ? 24 : 26,
+              color: const Color(0xFF455A64),
+            ),
             tooltip: (_isLedgerClosed && _isEmployeeLogin)
                 ? "Cannot add - Ledger is closed"
                 : "Add Transaction",
@@ -2048,188 +2170,203 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.lock, color: Colors.white,
-                                size: isLandscape ? 18 : 20),
+                            Icon(
+                              Icons.lock,
+                              color: Colors.white,
+                              size: isLandscape ? 18 : 20,
+                            ),
                             SizedBox(width: isLandscape ? 6 : 8),
-                            Text('LEDGER CLOSED',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: isLandscape ? 14 : 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.8,
-                                )),
+                            Text(
+                              'LEDGER CLOSED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: isLandscape ? 14 : 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     _isLoading
-              ? Container(
-                  margin: EdgeInsets.zero,
-                  padding: EdgeInsets.symmetric(
-                    vertical: isLandscape ? 16 : 20,
-                    horizontal: 16,
-                  ),
-                  color: Colors.white,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              height: 14,
-                              width: 80,
-                              color: Colors.grey[200],
+                        ? Container(
+                            margin: EdgeInsets.zero,
+                            padding: EdgeInsets.symmetric(
+                              vertical: isLandscape ? 16 : 20,
+                              horizontal: 16,
                             ),
-                            const SizedBox(height: 8),
-                            Container(
-                              height: 22,
-                              width: double.infinity,
-                              color: Colors.grey[200],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : _buildOpeningBalanceCard(opening),
-          Expanded(
-            child: _isLoading
-                ? _buildProfessionalShimmer(isLandscape)
-                : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: _getTransactionsStream(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return _buildProfessionalShimmer(isLandscape);
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text("Error: ${snapshot.error}"));
-                      }
-
-                      final docs = snapshot.data?.docs ?? [];
-
-                      // ✅ Sort transactions in memory to get chronological order (first added = first shown)
-                      if (docs.isNotEmpty) {
-                        docs.sort((a, b) {
-                          try {
-                            final aData = a.data();
-                            final bData = b.data();
-                            final aCreated = aData['createdAt'] as Timestamp?;
-                            final bCreated = bData['createdAt'] as Timestamp?;
-
-                            if (aCreated != null && bCreated != null) {
-                              return aCreated.compareTo(
-                                bCreated,
-                              ); // ✅ Ascending order (first added first)
-                            }
-
-                            // Fallback to document ID comparison
-                            return a.id.compareTo(b.id);
-                          } catch (e) {
-                            return a.id.compareTo(b.id);
-                          }
-                        });
-                      }
-
-                      if (docs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.description_outlined,
-                                size: isLandscape ? 56 : 64,
-                                color: Colors.grey[400],
-                              ),
-                              SizedBox(height: isLandscape ? 12 : 16),
-                              Text(
-                                'No transactions found',
-                                style: TextStyle(
-                                  fontSize: isLandscape ? 16 : 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              if (!_isLedgerClosed) ...[
-                                SizedBox(height: isLandscape ? 6 : 8),
-                                Text(
-                                  'Tap + to add a transaction',
-                                  style: TextStyle(
-                                    fontSize: isLandscape ? 13 : 14,
-                                    color: Colors.grey[600],
+                            color: Colors.white,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                 ),
-                                if (!_isEmployeeLogin) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Long press transactions to edit/delete (Admin only)',
-                                    style: TextStyle(
-                                      fontSize: isLandscape ? 12 : 13,
-                                      color: Colors.grey[500],
-                                      fontStyle: FontStyle.italic,
-                                    ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        height: 14,
+                                        width: 80,
+                                        color: Colors.grey[200],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        height: 22,
+                                        width: double.infinity,
+                                        color: Colors.grey[200],
+                                      ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ],
-                            ],
-                          ),
-                        );
-                      }
+                            ),
+                          )
+                        : _buildOpeningBalanceCard(opening),
+                    Expanded(
+                      child: _isLoading
+                          ? _buildProfessionalShimmer(isLandscape)
+                          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                              stream: _getTransactionsStream(),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return _buildProfessionalShimmer(isLandscape);
+                                }
+                                if (snapshot.hasError) {
+                                  return Center(
+                                    child: Text("Error: ${snapshot.error}"),
+                                  );
+                                }
 
-                      double totalCredit = 0;
-                      double totalDebit = 0;
+                                final docs = snapshot.data?.docs ?? [];
 
-                      for (var d in docs) {
-                        final data = d.data();
-                        final bool isCredit = data['isCredit'] ?? false;
-                        final double amt = (data['amount'] ?? 0).toDouble();
-                        // Payment IN = DEBIT (isCredit = false) → adds to totalDebit
-                        // Payment OUT = CREDIT (isCredit = true) → adds to totalCredit
-                        if (isCredit) {
-                          totalCredit += amt;
-                        } else {
-                          totalDebit += amt;
-                        }
-                      }
+                                // ✅ Sort transactions in memory to get chronological order (first added = first shown)
+                                if (docs.isNotEmpty) {
+                                  docs.sort((a, b) {
+                                    try {
+                                      final aData = a.data();
+                                      final bData = b.data();
+                                      final aCreated =
+                                          aData['createdAt'] as Timestamp?;
+                                      final bCreated =
+                                          bData['createdAt'] as Timestamp?;
 
-                      // ✅ CORRECT FORMULA: Closing Balance = Opening - Payment IN + Payment OUT
-                      // Payment IN = DEBIT = subtracts from balance
-                      // Payment OUT = CREDIT = adds to balance
-                      // Which is: Opening - Debit + Credit
-                      final newClosing = opening - totalDebit + totalCredit;
-                      _updateClosingBalance(newClosing);
+                                      if (aCreated != null &&
+                                          bCreated != null) {
+                                        return aCreated.compareTo(
+                                          bCreated,
+                                        ); // ✅ Ascending order (first added first)
+                                      }
 
-                      return Container(
-                        color: Colors.white,
-                        child: ListView.builder(
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            final data = doc.data();
-                            return _buildTransactionItem(
-                              context,
-                              data,
-                              doc,
-                              isLandscape,
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),    // closes StreamBuilder
-                  ),    // closes Expanded(child: ...)
-                  ],   // end Ledger tab Column children
-                ),     // end Ledger tab Column
+                                      // Fallback to document ID comparison
+                                      return a.id.compareTo(b.id);
+                                    } catch (e) {
+                                      return a.id.compareTo(b.id);
+                                    }
+                                  });
+                                }
 
+                                if (docs.isEmpty) {
+                                  return Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.description_outlined,
+                                          size: isLandscape ? 56 : 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        SizedBox(height: isLandscape ? 12 : 16),
+                                        Text(
+                                          'No transactions found',
+                                          style: TextStyle(
+                                            fontSize: isLandscape ? 16 : 18,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        if (!_isLedgerClosed) ...[
+                                          SizedBox(height: isLandscape ? 6 : 8),
+                                          Text(
+                                            'Tap + to add a transaction',
+                                            style: TextStyle(
+                                              fontSize: isLandscape ? 13 : 14,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                          if (!_isEmployeeLogin) ...[
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Long press transactions to edit/delete (Admin only)',
+                                              style: TextStyle(
+                                                fontSize: isLandscape ? 12 : 13,
+                                                color: Colors.grey[500],
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                double totalCredit = 0;
+                                double totalDebit = 0;
+
+                                for (var d in docs) {
+                                  final data = d.data();
+                                  final bool isCredit =
+                                      data['isCredit'] ?? false;
+                                  final double amt = (data['amount'] ?? 0)
+                                      .toDouble();
+                                  // Payment IN = DEBIT (isCredit = false) → adds to totalDebit
+                                  // Payment OUT = CREDIT (isCredit = true) → adds to totalCredit
+                                  if (isCredit) {
+                                    totalCredit += amt;
+                                  } else {
+                                    totalDebit += amt;
+                                  }
+                                }
+
+                                // ✅ CORRECT FORMULA: Closing Balance = Opening - Payment IN + Payment OUT
+                                // Payment IN = DEBIT = subtracts from balance
+                                // Payment OUT = CREDIT = adds to balance
+                                // Which is: Opening - Debit + Credit
+                                final newClosing =
+                                    opening - totalDebit + totalCredit;
+                                _updateClosingBalance(newClosing);
+
+                                return Container(
+                                  color: Colors.white,
+                                  child: ListView.builder(
+                                    itemCount: docs.length,
+                                    itemBuilder: (context, index) {
+                                      final doc = docs[index];
+                                      final data = doc.data();
+                                      return _buildTransactionItem(
+                                        context,
+                                        data,
+                                        doc,
+                                        isLandscape,
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ), // closes StreamBuilder
+                    ), // closes Expanded(child: ...)
+                  ], // end Ledger tab Column children
+                ), // end Ledger tab Column
                 // ── Tab 2: Stock ──
                 (_selectedShopCollection == null)
                     ? const Center(child: CircularProgressIndicator())
@@ -2240,9 +2377,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         isEmployeeLogin: _isEmployeeLogin,
                         ledgerRef: _ledgerRef,
                       ),
-              ],        // end TabBarView children
-            ),          // end TabBarView
-          ),            // end Expanded
+              ], // end TabBarView children
+            ), // end TabBarView
+          ), // end Expanded
         ],
       ),
       floatingActionButton: ListenableBuilder(
@@ -2255,8 +2392,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
               final docs = snapshot.data?.docs ?? [];
               return FloatingActionButton(
                 backgroundColor: const Color(0xFF455A64),
-                onPressed:
-                    _isDownloading ? null : () => _showDownloadDialog(docs),
+                onPressed: _isDownloading
+                    ? null
+                    : () => _showDownloadDialog(docs),
                 tooltip: 'Download Report',
                 child: _isDownloading
                     ? SizedBox(
@@ -2264,8 +2402,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                         height: isLandscape ? 18 : 20,
                         child: const CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Icon(
@@ -2336,9 +2475,7 @@ class _BillViewerScreenState extends State<_BillViewerScreen> {
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Bill saved to: $fileName'),
-                  ),
+                  Expanded(child: Text('Bill saved to: $fileName')),
                 ],
               ),
               backgroundColor: Colors.green[600],
@@ -2388,10 +2525,9 @@ class _BillViewerScreenState extends State<_BillViewerScreen> {
         setState(() => _isDownloading = false);
 
         // Share the file
-        await Share.shareXFiles(
-          [XFile(filePath)],
-          text: 'Bill for ${widget.transactionTitle}',
-        );
+        await Share.shareXFiles([
+          XFile(filePath),
+        ], text: 'Bill for ${widget.transactionTitle}');
       } else {
         throw Exception('Failed to download image: ${response.statusCode}');
       }
@@ -2467,7 +2603,7 @@ class _BillViewerScreenState extends State<_BillViewerScreen> {
                 child: CircularProgressIndicator(
                   value: loadingProgress.expectedTotalBytes != null
                       ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
+                            loadingProgress.expectedTotalBytes!
                       : null,
                   color: Colors.white,
                 ),
@@ -2491,7 +2627,10 @@ class _BillViewerScreenState extends State<_BillViewerScreen> {
                     const SizedBox(height: 8),
                     Text(
                       error.toString(),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],

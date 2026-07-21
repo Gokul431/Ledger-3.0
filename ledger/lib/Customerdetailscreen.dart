@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -971,9 +971,12 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         maxChildSize: 0.8,
         builder: (context, scrollController) => SafeArea(
           child: Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.grey[50],
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: Column(
               children: [
@@ -1040,7 +1043,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                 // Divider
                 Container(
                   height: 1,
-                  margin: EdgeInsets.symmetric(horizontal: isLandscape ? 20 : 24),
+                  margin: EdgeInsets.symmetric(
+                    horizontal: isLandscape ? 20 : 24,
+                  ),
                   color: Colors.grey[200],
                 ),
                 // Content
@@ -1091,7 +1096,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         );
                       }
 
-                      final data = snapshot.data!.data() as Map<String, dynamic>?;
+                      final data =
+                          snapshot.data!.data() as Map<String, dynamic>?;
                       if (data == null) {
                         return const Center(child: Text('No data available'));
                       }
@@ -1101,7 +1107,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                         if (timestamp == null) return 'Not available';
                         if (timestamp is Timestamp) {
                           final date = timestamp.toDate();
-                          return DateFormat('dd MMM yyyy, hh:mm a').format(date);
+                          return DateFormat(
+                            'dd MMM yyyy, hh:mm a',
+                          ).format(date);
                         }
                         return timestamp.toString();
                       }
@@ -1112,7 +1120,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                           left: isLandscape ? 20 : 24,
                           right: isLandscape ? 20 : 24,
                           top: isLandscape ? 12 : 16,
-                          bottom: isLandscape ? 16 : 20, // ✅ Extra bottom padding
+                          bottom: isLandscape
+                              ? 16
+                              : 20, // ✅ Extra bottom padding
                         ),
                         child: Column(
                           children: [
@@ -1246,8 +1256,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     BuildContext context,
   ) {
     final bool isPositive = balance >= 0;
-    final Color primaryColor =
-        isPositive ? (Colors.red[700]!) : Colors.green[700]!;
+    final Color primaryColor = isPositive
+        ? (Colors.red[700]!)
+        : Colors.green[700]!;
 
     return Container(
       width: double.infinity,
@@ -1330,8 +1341,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     // Payment IN = DEBIT (isCredit = false) = GREEN (money coming in)
     // Payment OUT = CREDIT (isCredit = true) = RED (money going out)
     final transactionColor = isCredit ? Colors.red[700] : Colors.green[700];
-    final String typeLabel =
-        isCredit ? 'Credit to customer' : 'Received from customer';
+    final String typeLabel = isCredit
+        ? 'Credit to customer'
+        : 'Received from customer';
 
     return Column(
       children: [
@@ -1357,7 +1369,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                 child: Icon(
                   // Payment IN (isCredit=false) = money coming in = arrow up
                   // Payment OUT (isCredit=true) = money going out = arrow down
-                  isCredit ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                  isCredit
+                      ? Icons.keyboard_arrow_down
+                      : Icons.keyboard_arrow_up,
                   color: transactionColor,
                   size: isLandscape ? 20 : 22,
                 ),
@@ -1455,8 +1469,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         builder: (pageContext) => BalanceDetailsScreen(
           shopCollection: _selectedShopCollection!,
           customerId: widget.customerId,
-                                        ),
-                                      ),
+        ),
+      ),
     );
   }
 
@@ -1490,7 +1504,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         actions: [
           FutureBuilder<Map<String, dynamic>>(
             future: _getCustomerData(),
-                            builder: (context, snapshot) {
+            builder: (context, snapshot) {
               final mobile = snapshot.data?['mobile'] ?? '';
 
               return IconButton(
@@ -1503,8 +1517,10 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
             },
           ),
           IconButton(
-            icon: Icon(Icons.account_balance_wallet_outlined,
-                size: isLandscape ? 22 : 24),
+            icon: Icon(
+              Icons.account_balance_wallet_outlined,
+              size: isLandscape ? 22 : 24,
+            ),
             tooltip: 'Balance details',
             onPressed: _showBalanceSummaryDialog,
           ),
@@ -1610,9 +1626,11 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                     startBalanceById[doc.id] = balance;
 
                     if (isCredit) {
-                      balance += amount; // Payment OUT increases what customer owes
+                      balance +=
+                          amount; // Payment OUT increases what customer owes
                     } else {
-                      balance -= amount; // Payment IN reduces what customer owes
+                      balance -=
+                          amount; // Payment IN reduces what customer owes
                     }
                   }
 
@@ -1669,7 +1687,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                                     final String docId = doc.id;
                                     final startBalance =
                                         startBalanceById[docId] ??
-                                            openingAmount;
+                                        openingAmount;
                                     return _buildTransactionItem(
                                       data,
                                       startBalance,
@@ -1689,15 +1707,17 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       ),
       // 🔹 Floating Action Button with Loading State
       floatingActionButton: StreamBuilder<QuerySnapshot>(
-        stream: _selectedShopCollection != null && _selectedShopCollection!.isNotEmpty
+        stream:
+            _selectedShopCollection != null &&
+                _selectedShopCollection!.isNotEmpty
             ? FirebaseFirestore.instance
-                .collection(_selectedShopCollection!)
-                .doc('customers')
-                .collection('list')
-                .doc(widget.customerId)
-                .collection('transactions')
-                .orderBy('createdAt', descending: true)
-                .snapshots()
+                  .collection(_selectedShopCollection!)
+                  .doc('customers')
+                  .collection('list')
+                  .doc(widget.customerId)
+                  .collection('transactions')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots()
             : Stream.empty(),
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
@@ -1720,4 +1740,4 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       ),
     );
   }
-  }
+}

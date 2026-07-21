@@ -379,7 +379,11 @@ class _DaySection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           ...outEntries.asMap().entries.map((e) {
-            final totalQty = (e.value['totalQty'] as num?)?.toDouble() ?? 0;
+            // 'soldQty' is the current schema; 'totalQty' is a legacy fallback
+            // for entries recorded before the closing-stock entry change.
+            final soldQty = (e.value['soldQty'] as num?)?.toDouble() ??
+                (e.value['totalQty'] as num?)?.toDouble() ??
+                0;
             final bags = e.value['bags'] as List<dynamic>? ?? [];
             final ts = e.value['timestamp'] as String?;
             final timeStr = parseTime(ts);
@@ -388,7 +392,7 @@ class _DaySection extends StatelessWidget {
                 .join('  •  ');
             return _EntryRow(
               index: e.key + 1,
-              qty: '-${fmt.format(totalQty)} kgs',
+              qty: '-${fmt.format(soldQty)} kgs',
               detail: bagStr.isNotEmpty ? bagStr : null,
               time: timeStr,
               isIn: false,

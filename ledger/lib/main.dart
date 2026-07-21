@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:device_preview/device_preview.dart';
 import 'ledgerlist.dart';
 import 'splashscreen.dart';
 import 'firebase_options.dart';
@@ -35,7 +37,12 @@ Future<void> main() async {
     print('Firebase initialization error: $e');
     // Optionally handle initialization failure (e.g., show error screen)
   }
-  runApp(const MyApp());
+  runApp(
+    DevicePreview(
+      enabled: !kReleaseMode,
+      builder: (context) => const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -46,6 +53,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Ledger App',
+      locale: DevicePreview.locale(context),
+      builder: DevicePreview.appBuilder,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF455A64),
@@ -71,6 +80,13 @@ class MyApp extends StatelessWidget {
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
           backgroundColor: Color(0xFF455A64),
           foregroundColor: Colors.white,
+        ),
+        // Caps every AlertDialog/Dialog in the app to a comfortable width
+        // instead of growing with screen size — on tablets, dialogs with a
+        // Row of Expanded buttons would otherwise stretch almost edge to
+        // edge. A no-op for dialogs already narrower than this on phones.
+        dialogTheme: const DialogThemeData(
+          constraints: BoxConstraints(maxWidth: 440),
         ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
           color: Color(0xFF455A64),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
@@ -57,23 +57,27 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _runConnectivityDiagnostics() async {
     setState(() => _isLoading = true);
     List<String> results = [];
-    
+
     try {
       results.add('🔍 Starting Connectivity Diagnostics...');
-      
+
       // 1. Check general internet (Google DNS)
       try {
-        final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 5));
+        final result = await InternetAddress.lookup(
+          'google.com',
+        ).timeout(const Duration(seconds: 5));
         if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
           results.add('✅ Google.com: REACHABLE');
         }
       } catch (e) {
         results.add('❌ Google.com: UNREACHABLE ($e)');
       }
-      
+
       // 2. Check Firestore Host
       try {
-        final result = await InternetAddress.lookup('firestore.googleapis.com').timeout(const Duration(seconds: 5));
+        final result = await InternetAddress.lookup(
+          'firestore.googleapis.com',
+        ).timeout(const Duration(seconds: 5));
         if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
           results.add('✅ Firestore Host: REACHABLE');
         }
@@ -83,7 +87,9 @@ class _LoginScreenState extends State<LoginScreen>
 
       // 3. Check Firebase Auth Host
       try {
-        final result = await InternetAddress.lookup('www.googleapis.com').timeout(const Duration(seconds: 5));
+        final result = await InternetAddress.lookup(
+          'www.googleapis.com',
+        ).timeout(const Duration(seconds: 5));
         if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
           results.add('✅ Google APIs: REACHABLE');
         }
@@ -99,14 +105,27 @@ class _LoginScreenState extends State<LoginScreen>
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: results.map((r) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(r, style: TextStyle(
-                  fontSize: 13,
-                  color: r.contains('❌') ? Colors.red : (r.contains('✅') ? Colors.green : Colors.black87),
-                  fontWeight: r.contains('Starting') ? FontWeight.bold : FontWeight.normal,
-                )),
-              )).toList(),
+              children: results
+                  .map(
+                    (r) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        r,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: r.contains('❌')
+                              ? Colors.red
+                              : (r.contains('✅')
+                                    ? Colors.green
+                                    : Colors.black87),
+                          fontWeight: r.contains('Starting')
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
             ),
             actions: [
               TextButton(
@@ -180,7 +199,9 @@ class _LoginScreenState extends State<LoginScreen>
 
       // If no IMEI is stored, allow login (backward compatibility)
       if (storedImei == null || storedImei.isEmpty) {
-        debugPrint('⚠️ No IMEI stored, allowing login (backward compatibility)');
+        debugPrint(
+          '⚠️ No IMEI stored, allowing login (backward compatibility)',
+        );
         return true;
       }
 
@@ -194,8 +215,10 @@ class _LoginScreenState extends State<LoginScreen>
 
       // Compare IMEIs
       final isMatch = storedImei.trim() == currentImei.trim();
-      debugPrint('IMEI Check - Stored: $storedImei, Current: $currentImei, Match: $isMatch');
-      
+      debugPrint(
+        'IMEI Check - Stored: $storedImei, Current: $currentImei, Match: $isMatch',
+      );
+
       return isMatch;
     } catch (e) {
       debugPrint('Error verifying device IMEI: $e');
@@ -379,16 +402,21 @@ class _LoginScreenState extends State<LoginScreen>
 
   /// Verify if phone number exists in adminlogin collection
   Future<Map<String, dynamic>?> _verifyPhoneNumberInAdminLogin(
-      String phoneNumber) async {
+    String phoneNumber,
+  ) async {
     try {
       // Normalize input phone number (remove +, spaces, etc. and get last 10 digits)
       String normalizedPhone = phoneNumber.replaceAll(RegExp(r'[+\s-]'), '');
       if (normalizedPhone.length > 10) {
-        normalizedPhone = normalizedPhone.substring(normalizedPhone.length - 10);
+        normalizedPhone = normalizedPhone.substring(
+          normalizedPhone.length - 10,
+        );
       }
-      
-      debugPrint('🔍 Searching for phone number (last 10 digits): $normalizedPhone');
-      
+
+      debugPrint(
+        '🔍 Searching for phone number (last 10 digits): $normalizedPhone',
+      );
+
       // Attempt direct query (exact match or various formats)
       // Note: This assumes stored numbers might have +91, 91, or just 10 digits
       final querySnapshot = await FirebaseFirestore.instance
@@ -396,16 +424,18 @@ class _LoginScreenState extends State<LoginScreen>
           .get();
 
       // Since phone numbers can be stored in various formats (+91..., 91..., or 10 digits),
-      // and Firestore doesn't support regex/substring queries, we still check locally 
+      // and Firestore doesn't support regex/substring queries, we still check locally
       // but we could optimize by only fetching once or using a better indexing strategy.
       // FOR NOW: We keep the fetch but optimize the comparison logic and add logging.
-      
+
       for (var doc in querySnapshot.docs) {
         final data = doc.data();
-        final docPhone = data['phoneNumber']?.toString().replaceAll(RegExp(r'[+\s-]'), '') ?? '';
-        
+        final docPhone =
+            data['phoneNumber']?.toString().replaceAll(RegExp(r'[+\s-]'), '') ??
+            '';
+
         if (docPhone.isEmpty) continue;
-        
+
         // Compare last 10 digits
         if (docPhone.length >= 10) {
           final last10Doc = docPhone.substring(docPhone.length - 10);
@@ -415,7 +445,7 @@ class _LoginScreenState extends State<LoginScreen>
           }
         }
       }
-      
+
       debugPrint('❌ No matching phone number found');
       return null;
     } catch (e) {
@@ -527,11 +557,13 @@ class _LoginScreenState extends State<LoginScreen>
   /// Sign in with phone credential and complete login
   Future<void> _signInWithCredential(PhoneAuthCredential credential) async {
     try {
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-      
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
+
       // Get admin details from Firestore using phone number
       final adminData = await _verifyPhoneNumberInAdminLogin(_phoneNumber);
-      
+
       if (adminData == null) {
         await FirebaseAuth.instance.signOut();
         if (mounted) {
@@ -563,8 +595,8 @@ class _LoginScreenState extends State<LoginScreen>
                   const LedgerListScreen(),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
+                    return FadeTransition(opacity: animation, child: child);
+                  },
               transitionDuration: const Duration(milliseconds: 400),
             ),
           );
@@ -627,10 +659,10 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
       final clientDetails = await _getClientDetails(username);
-      
+
       // Get email from adminlogin for Firebase Auth
       final email = clientDetails?['email'] as String?;
-      
+
       // Sign in to Firebase Auth if email exists
       if (email != null && email.isNotEmpty) {
         try {
@@ -650,17 +682,18 @@ class _LoginScreenState extends State<LoginScreen>
             .where('username', isEqualTo: username)
             .limit(1)
             .get();
-        
+
         if (adminDoc.docs.isNotEmpty) {
           final emailToCreate = '$username@admin.ledger.local';
           try {
             // Try to create Firebase Auth user
-            final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: emailToCreate,
-              password: password,
-            );
+            final userCredential = await FirebaseAuth.instance
+                .createUserWithEmailAndPassword(
+                  email: emailToCreate,
+                  password: password,
+                );
             debugPrint('✅ Created Firebase Auth user for client');
-            
+
             // Update Firestore with email
             await adminDoc.docs.first.reference.update({
               'email': emailToCreate,
@@ -828,17 +861,19 @@ class _LoginScreenState extends State<LoginScreen>
     String message = error.toString();
     String title = 'Login Failed';
     IconData icon = Icons.error_outline;
-    
+
     // Specially handle network/connectivity errors
-    if (message.contains('UNAVAILABLE') || 
-        message.contains('UnknownHostException') || 
+    if (message.contains('UNAVAILABLE') ||
+        message.contains('UnknownHostException') ||
         message.contains('Network error')) {
       title = 'Network Error';
-      message = 'Unable to reach Firebase. Please check your internet connection or emulator network settings.';
+      message =
+          'Unable to reach Firebase. Please check your internet connection or emulator network settings.';
       icon = Icons.wifi_off_rounded;
     } else if (message.contains('permission-denied')) {
       title = 'Access Denied';
-      message = 'You do not have permission to access these records. Please contact the administrator.';
+      message =
+          'You do not have permission to access these records. Please contact the administrator.';
       icon = Icons.lock_person_rounded;
     } else if (message.contains('invalid-credential')) {
       title = 'Invalid Credentials';
@@ -868,10 +903,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     Text(
                       message,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.white,
-                      ),
+                      style: const TextStyle(fontSize: 13, color: Colors.white),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -921,9 +953,71 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  Widget get _activeLoginView => _showClientPasswordLogin
+      ? _buildClientPasswordLoginView()
+      : _showClientOTPLogin
+      ? _buildClientOTPLoginView()
+      : _buildMainLoginView();
+
+  Widget _buildBranding({required bool compact}) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: compact ? 72 : 90,
+            height: compact ? 72 : 90,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.15),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.4),
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.receipt_long,
+              size: compact ? 36 : 45,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Ledger App',
+            style: TextStyle(
+              fontSize: compact ? 26 : 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Smart Business Management',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.white.withOpacity(0.85),
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final isTablet = size.shortestSide >= 600;
 
     return Scaffold(
       body: Container(
@@ -938,104 +1032,93 @@ class _LoginScreenState extends State<LoginScreen>
         ),
         child: SafeArea(
           bottom: true,
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: size.height - 
-                    MediaQuery.of(context).padding.top - 
-                    MediaQuery.of(context).padding.bottom,
-              ),
-              child: IntrinsicHeight(
-                child: Column(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 90,
-                              height: 90,
+          child: isTablet
+              // ── Tablet: a floating, capped-width card centered on the
+              // full-bleed gradient — not a bottom sheet stretched edge to
+              // edge, and not the whole app letterboxed. ──
+              ? Center(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildBranding(compact: true),
+                          const SizedBox(height: 32),
+                          SlideTransition(
+                            position: _slideAnimation,
+                            child: Container(
+                              width: double.infinity,
                               decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.15),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.4),
-                                  width: 2.5,
-                                ),
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
+                                    color: Colors.black.withOpacity(0.25),
+                                    blurRadius: 30,
+                                    offset: const Offset(0, 16),
                                   ),
                                 ],
                               ),
-                              child: const Icon(
-                                Icons.receipt_long,
-                                size: 45,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            const Text(
-                              'Ledger App',
-                              style: TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Smart Business Management',
-                              style: TextStyle(
-                                fontSize: 15,
-                                color: Colors.white.withOpacity(0.85),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Container(
-                          width: double.infinity,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(32),
+                              padding: const EdgeInsets.all(32),
+                              child: _activeLoginView,
                             ),
                           ),
-                          child: Padding(
-                            padding: EdgeInsets.only(
-                              left: 24,
-                              right: 24,
-                              top: 32,
-                              bottom: 32 + MediaQuery.of(context).padding.bottom,
-                            ),
-                            child: _showClientPasswordLogin
-                                ? _buildClientPasswordLoginView()
-                                : _showClientOTPLogin
-                                    ? _buildClientOTPLoginView()
-                                : _buildMainLoginView(),
-                          ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                )
+              // ── Phone: original bottom-sheet-style split, unchanged. ──
+              : SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight:
+                          size.height -
+                          MediaQuery.of(context).padding.top -
+                          MediaQuery.of(context).padding.bottom,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Column(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: _buildBranding(compact: false),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: SlideTransition(
+                              position: _slideAnimation,
+                              child: Container(
+                                width: double.infinity,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(32),
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    left: 24,
+                                    right: 24,
+                                    top: 32,
+                                    bottom:
+                                        32 +
+                                        MediaQuery.of(context).padding.bottom,
+                                  ),
+                                  child: _activeLoginView,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -1115,7 +1198,7 @@ class _LoginScreenState extends State<LoginScreen>
         }
       });
     }
-    
+
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1162,7 +1245,11 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               IconButton(
                 onPressed: _runConnectivityDiagnostics,
-                icon: Icon(Icons.info_outline, color: Colors.grey[400], size: 20),
+                icon: Icon(
+                  Icons.info_outline,
+                  color: Colors.grey[400],
+                  size: 20,
+                ),
                 tooltip: 'Network Diagnostics',
               ),
             ],
@@ -1260,7 +1347,9 @@ class _LoginScreenState extends State<LoginScreen>
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(
@@ -1377,7 +1466,9 @@ class _LoginScreenState extends State<LoginScreen>
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(
@@ -1405,10 +1496,7 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                   ),
                 ),
-                Text(
-                  ' | ',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
+                Text(' | ', style: TextStyle(color: Colors.grey[600])),
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -1669,8 +1757,8 @@ class _LoginScreenState extends State<LoginScreen>
                   fontSize: 14,
                   color: Colors.grey[700],
                   fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                ),
+              ),
             ),
           ),
           // Add extra bottom padding to ensure button is fully visible
@@ -1704,8 +1792,10 @@ class _LoginScreenState extends State<LoginScreen>
 
               return Padding(
                 padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 
-                      MediaQuery.of(context).padding.bottom + 24,
+                  bottom:
+                      MediaQuery.of(context).viewInsets.bottom +
+                      MediaQuery.of(context).padding.bottom +
+                      24,
                   left: 24,
                   right: 24,
                   top: 24,

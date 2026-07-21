@@ -19,13 +19,16 @@ class AddEditItemPage extends StatefulWidget {
 }
 
 class _AddEditItemPageState extends State<AddEditItemPage> {
+  late TextEditingController _itemIdController;
   late TextEditingController _nameController;
   late TextEditingController _priceController;
   late TextEditingController _stockController;
-  
+  late TextEditingController _bagSizeController;
+
   bool _isActive = true;
   DateTime _selectedDate = DateTime.now();
   bool _isSaving = false;
+  List<int> _bagSizes = [];
 
   bool get isEdit => widget.existingDoc != null;
 
@@ -34,30 +37,172 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
     super.initState();
     final data = widget.existingDoc?.data() as Map<String, dynamic>?;
     
+    _itemIdController = TextEditingController(
+        text: data != null ? (data['itemId'] ?? '').toString() : '');
     _nameController = TextEditingController(text: data?['itemName'] ?? '');
     _priceController = TextEditingController(
         text: data != null ? (data['price'] ?? 0).toString() : '');
     _stockController = TextEditingController(
         text: data != null ? (data['openingStock'] ?? 0).toString() : '');
-        
+    _bagSizeController = TextEditingController();
+
     if (data != null) {
       _isActive = data['isActive'] ?? true;
       if (data['openingStockDate'] != null) {
         _selectedDate = (data['openingStockDate'] as Timestamp).toDate();
+      }
+      final rawBagSizes = data['bagSizes'] as List<dynamic>?;
+      if (rawBagSizes != null) {
+        _bagSizes = rawBagSizes.map((e) => (e as num).toInt()).toList();
       }
     }
   }
 
   @override
   void dispose() {
+    _itemIdController.dispose();
     _nameController.dispose();
     _priceController.dispose();
     _stockController.dispose();
+    _bagSizeController.dispose();
     super.dispose();
   }
 
+  void _addBagSize() {
+    final size = int.tryParse(_bagSizeController.text.trim());
+    if (size == null || size <= 0 || _bagSizes.contains(size)) return;
+    setState(() {
+      _bagSizes.add(size);
+      _bagSizes.sort((a, b) => b.compareTo(a));
+      _bagSizeController.clear();
+    });
+  }
+
+  void _removeBagSize(int size) {
+    setState(() => _bagSizes.remove(size));
+  }
+
+  /// Mirrors StockTab's cascade fix for the same bug class: if an existing
+  /// item's opening stock / start date is corrected here *after* ledger days
+  /// already exist for it, those days' frozen openingStock would otherwise
+  /// stay stale. Walks forward from [startDate] fixing each existing day's
+  /// openingStock, and syncs the item's lastClosingStock once it reaches a
+  /// day that's already in sync (or runs out of days).
+  ///
+  /// A day that hasn't been closed yet (no outEntries) just gets its
+  /// closingStock recomputed as opening + totalIn. A day that was ALREADY
+  /// closed has a physically-measured closing amount that must not change —
+  /// only the derived sold qty / sales value (and that day's sales totals)
+  /// get recalculated.
+  Future<void> _cascadeOpeningCorrection(
+    DocumentReference itemMasterRef,
+    String itemKey,
+    DateTime startDate,
+    double newOpening,
+  ) async {
+    DateTime cursorDate = startDate;
+    double cursorValue = newOpening;
+    bool touchedAny = false;
+
+    while (true) {
+      final dateStr = DateFormat('dd-MMM-yyyy').format(cursorDate);
+      final itemsCol = FirebaseFirestore.instance
+          .collection(widget.shopCollection)
+          .doc('stockLedger')
+          .collection('dates')
+          .doc(dateStr)
+          .collection('items');
+      final ref = itemsCol.doc(itemKey);
+
+      final snap = await ref.get();
+      if (!snap.exists) break;
+
+      final d = snap.data() as Map<String, dynamic>;
+      final oldOpening = (d['openingStock'] ?? 0).toDouble();
+      if (touchedAny && oldOpening == cursorValue) break; // downstream in sync
+
+      final totalIn = (d['totalIn'] ?? 0).toDouble();
+      final outEntries = d['outEntries'] as List<dynamic>? ?? [];
+      final updates = <String, dynamic>{'openingStock': cursorValue};
+      double newValue;
+
+      if (outEntries.isNotEmpty) {
+        final price = (d['price'] ?? 0).toDouble();
+        final lastOut = outEntries.last as Map<String, dynamic>;
+        final measuredClosing = (lastOut['closingQty'] ?? 0).toDouble();
+        final newTotalOut =
+            (cursorValue + totalIn - measuredClosing).clamp(0.0, double.infinity);
+        updates['totalOut'] = newTotalOut;
+        updates['salesValue'] = newTotalOut * price;
+        updates['closingStock'] = measuredClosing;
+        newValue = measuredClosing;
+
+        await ref.update(updates);
+        await _resyncDayTotals(dateStr, itemsCol);
+      } else {
+        newValue = cursorValue + totalIn; // totalOut is always 0 here
+        updates['closingStock'] = newValue;
+        await ref.update(updates);
+      }
+
+      touchedAny = true;
+      cursorValue = newValue;
+      cursorDate = cursorDate.add(const Duration(days: 1));
+    }
+
+    if (touchedAny) {
+      await itemMasterRef.update({
+        'lastClosingStock': cursorValue,
+        'lastClosingDate':
+            Timestamp.fromDate(cursorDate.subtract(const Duration(days: 1))),
+      });
+    }
+  }
+
+  /// Recomputes a date's total sales from its item docs and syncs it to the
+  /// stockLedger date doc and that date's ledger doc (if one exists).
+  Future<void> _resyncDayTotals(
+      String dateStr, CollectionReference itemsCol) async {
+    final itemDocs = await itemsCol.get();
+    double total = 0;
+    for (final doc in itemDocs.docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      total += (data['salesValue'] ?? 0).toDouble();
+    }
+
+    final dateDocRef = FirebaseFirestore.instance
+        .collection(widget.shopCollection)
+        .doc('stockLedger')
+        .collection('dates')
+        .doc(dateStr);
+    await dateDocRef.set({'totalSalesValue': total}, SetOptions(merge: true));
+
+    final ledgerQuery = await FirebaseFirestore.instance
+        .collection(widget.shopCollection)
+        .doc('ledgers')
+        .collection('dates')
+        .where('ledgerDate', isEqualTo: dateStr)
+        .limit(1)
+        .get();
+    if (ledgerQuery.docs.isNotEmpty) {
+      await ledgerQuery.docs.first.reference
+          .set({'saleValue': total}, SetOptions(merge: true));
+    }
+  }
+
   Future<void> _saveItem() async {
+    final itemId = _itemIdController.text.trim();
     final name = _nameController.text.trim();
+    if (itemId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please enter an item ID.'),
+          backgroundColor: Colors.red[600],
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -81,11 +226,13 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
           .collection('list');
 
       final Map<String, dynamic> saveData = {
+        'itemId': itemId,
         'itemName': name,
         'price': price,
         'openingStock': openingStock,
         'openingStockDate': Timestamp.fromDate(_selectedDate),
         'isActive': _isActive,
+        'bagSizes': _bagSizes,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
@@ -93,7 +240,38 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
         saveData['createdAt'] = FieldValue.serverTimestamp();
         await col.add(saveData);
       } else {
-        await col.doc(widget.existingDoc!.id).update(saveData);
+        final existingData =
+            widget.existingDoc!.data() as Map<String, dynamic>;
+        final originalKey =
+            (existingData['itemId'] ?? '').toString().trim().isNotEmpty
+                ? (existingData['itemId'] as String).trim()
+                : widget.existingDoc!.id;
+        final originalOpening =
+            (existingData['openingStock'] ?? 0).toDouble();
+        DateTime? originalDateOnly;
+        if (existingData['openingStockDate'] != null) {
+          final raw = (existingData['openingStockDate'] as Timestamp).toDate();
+          originalDateOnly = DateTime(raw.year, raw.month, raw.day);
+        }
+        final selectedDateOnly = DateTime(
+            _selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+        final masterRef = col.doc(widget.existingDoc!.id);
+        await masterRef.update(saveData);
+
+        // Only safe to cascade when the ledger key (itemId) didn't change —
+        // a rename would point at a different stock ledger document entirely.
+        final keyUnchanged = originalKey == itemId;
+        final valueChanged = originalOpening != openingStock ||
+            originalDateOnly != selectedDateOnly;
+        if (keyUnchanged && valueChanged) {
+          await _cascadeOpeningCorrection(
+            masterRef,
+            itemId,
+            selectedDateOnly,
+            openingStock,
+          );
+        }
       }
 
       if (mounted) {
@@ -249,6 +427,15 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                     const SizedBox(height: 24),
 
                     _buildTextField(
+                      controller: _itemIdController,
+                      label: 'Item ID',
+                      hint: 'e.g. 1, 2, 3...',
+                      icon: Icons.tag_rounded,
+                      isNumber: true,
+                    ),
+                    const SizedBox(height: 20),
+
+                    _buildTextField(
                       controller: _nameController,
                       label: 'Item Name',
                       hint: 'e.g. Ponni Basmati',
@@ -309,6 +496,85 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    _buildSectionLabel('Bag Denominations (kg)'),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Bag sizes this item is packed in — used in New Stock & Closing Stock entry',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _bagSizeController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            onSubmitted: (_) => _addBagSize(),
+                            decoration: InputDecoration(
+                              hintText: 'e.g. 25',
+                              hintStyle: TextStyle(color: Colors.grey[300], fontSize: 16, fontWeight: FontWeight.w500),
+                              prefixIcon: Icon(Icons.inventory_outlined, color: Colors.grey[400], size: 22),
+                              filled: true,
+                              fillColor: const Color(0xFFF8F9FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.grey.shade200),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: BorderSide(color: Colors.grey.shade200),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
+                              ),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          height: 54,
+                          width: 54,
+                          child: ElevatedButton(
+                            onPressed: _addBagSize,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF455A64),
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              elevation: 0,
+                            ),
+                            child: const Icon(Icons.add_rounded, size: 26),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_bagSizes.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _bagSizes.map((size) {
+                          return Chip(
+                            label: Text('$size kg',
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                            backgroundColor: const Color(0xFFECEFF1),
+                            deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                            onDeleted: () => _removeBagSize(size),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: BorderSide(color: Colors.grey.shade300),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                     const SizedBox(height: 20),
 
                     Container(

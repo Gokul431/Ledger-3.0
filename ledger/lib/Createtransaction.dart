@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
@@ -32,9 +32,6 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   // Shop related
   String? _userRole;
   bool _isLoadingShops = true;
-
-  // Step tracking
-  int _currentStep = 0;
 
   // Form data
   CustomerLedgerType _customerLedgerType = CustomerLedgerType.yes;
@@ -189,65 +186,10 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     }
   }
 
-  void _nextStep() {
-    if (_currentStep == 0) {
-      setState(() => _currentStep = 1);
-    } else if (_currentStep == 1) {
-      setState(() => _currentStep = 2);
-    } else if (_currentStep == 2) {
-      if (_customerLedgerType == CustomerLedgerType.yes) {
-        if (_selectedCustomerId == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please select a customer'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
-      } else {
-        if (_transactionDetailsController.text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please enter transaction details'),
-              backgroundColor: Colors.red,
-            ),
-          );
-          return;
-        }
-      }
-      setState(() => _currentStep = 3);
-    } else if (_currentStep == 3) {
-      // Validate amount before proceeding to photo step
-      if (_amountController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter amount'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      final amountText = _amountController.text.trim().replaceAll(',', '');
-      final amount = double.tryParse(amountText);
-      if (amount == null || amount <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please enter valid amount'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-      setState(() => _currentStep = 4);
-    }
-  }
-
-  void _previousStep() {
-    if (_currentStep > 0) {
-      setState(() => _currentStep--);
-    }
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -281,6 +223,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
         return Container(
+          width: double.infinity,
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -384,7 +327,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
 
       final shopCollection = widget.shopCollection ?? 'vks_retails';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'bill_${timestamp}_${_selectedImage!.path.split('/').last}';
+      final fileName =
+          'bill_${timestamp}_${_selectedImage!.path.split('/').last}';
       final ref = FirebaseStorage.instance.ref().child('bills').child(fileName);
 
       await ref.putFile(_selectedImage!);
@@ -408,25 +352,28 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   }
 
   Future<void> _saveTransaction() async {
+    // Validate transaction type specific fields
+    if (_customerLedgerType == CustomerLedgerType.yes) {
+      if (_selectedCustomerId == null) {
+        _showError('Please select a customer');
+        return;
+      }
+    } else {
+      if (_transactionDetailsController.text.trim().isEmpty) {
+        _showError('Please enter transaction details');
+        return;
+      }
+    }
+
     if (_amountController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter amount'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Please enter amount');
       return;
     }
 
     final amountText = _amountController.text.trim().replaceAll(',', '');
     final amount = double.tryParse(amountText);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter valid amount'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Please enter valid amount');
       return;
     }
 
@@ -459,7 +406,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       // Payment IN = DEBIT (isCredit = false)
       // Payment OUT = CREDIT (isCredit = true)
       final isCredit = _ledgerPaymentType == LedgerPaymentType.paymentOut;
-      
+
       debugPrint(
         'Saving: Amount=$amount, Ledger=$finalLedgerName, Shop=$shopCollection, Photo=${billPhotoUrl != null ? "Yes" : "No"}',
       );
@@ -553,59 +500,14 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     }
   }
 
-  Widget _buildStepIndicator() {
-    final steps = [
-      'Transaction Type',
-      'Payment Direction',
-      'Details',
-      'Amount',
-      'Bill Photo',
-    ];
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(5, (index) {
-            final isActive = index <= _currentStep;
-            return Expanded(
-              child: Column(
-                children: [
-                  Container(
-                    width: 35,
-                    height: 35,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isActive
-                          ? const Color(0xFF455A64)
-                          : Colors.grey[300],
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    steps[index],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                      color: isActive ? Colors.black87 : Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ),
-      ],
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: Colors.black87,
+      ),
     );
   }
 
@@ -642,568 +544,358 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
+      // Single scrollable page, full width, every field visible at once —
+      // no step wizard, no side-by-side/grid layout.
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Container(
-            width: double.infinity,
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStepIndicator(),
-                  const SizedBox(height: 32),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF455A64).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF455A64).withOpacity(0.3),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Date ──
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF455A64).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF455A64).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, color: Color(0xFF455A64)),
+                    const SizedBox(width: 12),
+                    Text(
+                      DateFormat('dd-MMM-yyyy').format(widget.date),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF455A64),
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today,
-                          color: Color(0xFF455A64),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              // ── Transaction type ──
+              _sectionLabel('Transaction Type'),
+              const SizedBox(height: 12),
+              _buildOptionCard(
+                title: 'Customer Transaction',
+                subtitle: 'Payment from or to a customer',
+                icon: Icons.person,
+                isSelected: _customerLedgerType == CustomerLedgerType.yes,
+                onTap: () => setState(
+                  () => _customerLedgerType = CustomerLedgerType.yes,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildOptionCard(
+                title: 'General Transaction',
+                subtitle: 'Other business expenses or income',
+                icon: Icons.business,
+                isSelected: _customerLedgerType == CustomerLedgerType.no,
+                onTap: () =>
+                    setState(() => _customerLedgerType = CustomerLedgerType.no),
+              ),
+              const SizedBox(height: 28),
+
+              // ── Payment direction ──
+              _sectionLabel('Payment Direction'),
+              const SizedBox(height: 12),
+              _buildOptionCard(
+                title: 'Payment In',
+                subtitle: 'Money received',
+                icon: Icons.arrow_downward,
+                isSelected: _ledgerPaymentType == LedgerPaymentType.paymentIn,
+                onTap: () => setState(
+                  () => _ledgerPaymentType = LedgerPaymentType.paymentIn,
+                ),
+                color: Colors.green,
+              ),
+              const SizedBox(height: 10),
+              _buildOptionCard(
+                title: 'Payment Out',
+                subtitle: 'Money spent',
+                icon: Icons.arrow_upward,
+                isSelected: _ledgerPaymentType == LedgerPaymentType.paymentOut,
+                onTap: () => setState(
+                  () => _ledgerPaymentType = LedgerPaymentType.paymentOut,
+                ),
+                color: Colors.red,
+              ),
+              const SizedBox(height: 28),
+
+              // ── Customer / details ──
+              if (_customerLedgerType == CustomerLedgerType.yes) ...[
+                _sectionLabel('Customer'),
+                const SizedBox(height: 12),
+                if (_loadingCustomers)
+                  const Center(child: CircularProgressIndicator())
+                else if (_customers.isEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddCustomer(),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
-                          DateFormat('dd-MMM-yyyy').format(widget.date),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                      ).then((_) => _loadCustomers());
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF455A64).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF455A64).withOpacity(0.3),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.add_circle_outline,
                             color: Color(0xFF455A64),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  if (_currentStep == 0) ...[
-                    const Text(
-                      'What type of transaction?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Select if this is a customer payment or general expense',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildOptionCard(
-                      title: 'Customer Transaction',
-                      subtitle: 'Payment from or to a customer',
-                      icon: Icons.person,
-                      isSelected: _customerLedgerType == CustomerLedgerType.yes,
-                      onTap: () => setState(
-                        () => _customerLedgerType = CustomerLedgerType.yes,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildOptionCard(
-                      title: 'General Transaction',
-                      subtitle: 'Other business expenses or income',
-                      icon: Icons.business,
-                      isSelected: _customerLedgerType == CustomerLedgerType.no,
-                      onTap: () => setState(
-                        () => _customerLedgerType = CustomerLedgerType.no,
-                      ),
-                    ),
-                  ] else if (_currentStep == 1) ...[
-                    _buildSummary(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Which direction?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Money coming in or going out?',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildOptionCard(
-                      title: 'Payment In',
-                      subtitle: 'Money received',
-                      icon: Icons.arrow_downward,
-                      isSelected:
-                          _ledgerPaymentType == LedgerPaymentType.paymentIn,
-                      onTap: () => setState(
-                        () => _ledgerPaymentType = LedgerPaymentType.paymentIn,
-                      ),
-                      color: Colors.green,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildOptionCard(
-                      title: 'Payment Out',
-                      subtitle: 'Money spent',
-                      icon: Icons.arrow_upward,
-                      isSelected:
-                          _ledgerPaymentType == LedgerPaymentType.paymentOut,
-                      onTap: () => setState(
-                        () => _ledgerPaymentType = LedgerPaymentType.paymentOut,
-                      ),
-                      color: Colors.red,
-                    ),
-                  ] else if (_currentStep == 2) ...[
-                    _buildSummary(),
-                    const SizedBox(height: 24),
-                    if (_customerLedgerType == CustomerLedgerType.yes) ...[
-                      const Text(
-                        'Which customer?',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      if (_loadingCustomers)
-                        const Center(child: CircularProgressIndicator())
-                      else if (_customers.isEmpty)
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AddCustomer(),
-                              ),
-                            ).then((_) => _loadCustomers());
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF455A64).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFF455A64).withOpacity(0.3),
-                              ),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(
-                                  Icons.add_circle_outline,
-                                  color: Color(0xFF455A64),
-                                ),
-                                SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'No customers. Tap to add one.',
-                                    style: TextStyle(
-                                      color: Color(0xFF455A64),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey[300]!),
-                          ),
-                          child: Theme(
-                            data: Theme.of(
-                              context,
-                            ).copyWith(canvasColor: Colors.white),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedCustomerId,
-                                isExpanded: true,
-                                hint: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.person_outline,
-                                      color: Colors.grey[500],
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      'Select a customer',
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                icon: Icon(
-                                  Icons.keyboard_arrow_down,
-                                  color: Colors.grey[600],
-                                  size: 24,
-                                ),
-                                items: _customers.map((customer) {
-                                  return DropdownMenuItem<String>(
-                                    value: customer['id'],
-                                    child: Text(
-                                      customer['name'],
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() => _selectedCustomerId = value);
-                                    final customer = _customers.firstWhere(
-                                      (c) => c['id'] == value,
-                                    );
-                                    setState(
-                                      () => _selectedCustomerName =
-                                          customer['name'],
-                                    );
-                                    _loadOutstandingAmount(value);
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 24),
-                      if (_selectedCustomerId != null) ...[
-                        // Outstanding Amount Card - Dynamic color based on amount
-                        // Positive amount (customer owes us) = RED
-                        // Negative amount (we owe customer) = GREEN
-                        Builder(
-                          builder: (context) {
-                            final bool isPositive = _outstandingAmount >= 0;
-                            final Color primaryColor = isPositive
-                                ? Colors.red[700]!
-                                : Colors.green[700]!;
-                            final Color backgroundColor = isPositive
-                                ? Colors.red[50]!
-                                : Colors.green[50]!;
-                            final Color borderColor = isPositive
-                                ? Colors.red[200]!
-                                : Colors.green[200]!;
-                            final Color iconBackgroundColor = isPositive
-                                ? Colors.red[100]!
-                                : Colors.green[100]!;
-
-                            return Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                                color: backgroundColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                  color: borderColor,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                      color: iconBackgroundColor,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  Icons.account_balance_wallet,
-                                      color: primaryColor,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Outstanding Amount',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '₹${NumberFormat('#,##,##0.00').format(_outstandingAmount.abs())}',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                            color: primaryColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                            );
-                          },
-                        ),
-                      ],
-                    ] else ...[
-                      const Text(
-                        'Transaction details',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      _buildLargeTextField(
-                        label: 'What is this transaction about?',
-                        hint: 'e.g., Office supplies, Petrol, Tea, Salary',
-                        controller: _transactionDetailsController,
-                      ),
-                    ],
-                  ] else if (_currentStep == 3) ...[
-                    _buildSummary(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'How much?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Enter the transaction amount',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildLargeTextField(
-                      label: 'Amount in Rupees',
-                      hint: 'e.g., 500',
-                      keyboardType: TextInputType.number,
-                      controller: _amountController,
-                    ),
-                  ] else if (_currentStep == 4) ...[
-                    _buildSummary(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Bill Photo (Optional)',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Add a photo of the bill or receipt',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildBillPhotoSection(),
-                  ],
-                  const SizedBox(height: 40),
-                  Row(
-                    children: [
-                      if (_currentStep > 0)
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[300],
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: _previousStep,
-                            child: const Text(
-                              'Back',
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'No customers. Tap to add one.',
                               style: TextStyle(
-                                color: Colors.black87,
-                                fontSize: 16,
+                                color: Color(0xFF455A64),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
-                        ),
-                      if (_currentStep > 0) const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF455A64),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: _isLoading || _isUploadingImage
-                              ? null
-                              : (_currentStep == 4
-                                    ? _saveTransaction
-                                    : _nextStep),
-                          child: _isLoading || _isUploadingImage
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  _currentStep == 4 ? 'Save' : 'Next',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Theme(
+                      data: Theme.of(
+                        context,
+                      ).copyWith(canvasColor: Colors.white),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedCustomerId,
+                          isExpanded: true,
+                          hint: Row(
+                            children: [
+                              Icon(
+                                Icons.person_outline,
+                                color: Colors.grey[500],
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Select a customer',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
                                 ),
+                              ),
+                            ],
+                          ),
+                          icon: Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.grey[600],
+                            size: 24,
+                          ),
+                          items: _customers.map((customer) {
+                            return DropdownMenuItem<String>(
+                              value: customer['id'],
+                              child: Text(
+                                customer['name'],
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _selectedCustomerId = value);
+                              final customer = _customers.firstWhere(
+                                (c) => c['id'] == value,
+                              );
+                              setState(
+                                () => _selectedCustomerName = customer['name'],
+                              );
+                              _loadOutstandingAmount(value);
+                            }
+                          },
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                if (_selectedCustomerId != null) ...[
+                  const SizedBox(height: 16),
+                  // Outstanding Amount Card - Dynamic color based on amount
+                  // Positive amount (customer owes us) = RED
+                  // Negative amount (we owe customer) = GREEN
+                  Builder(
+                    builder: (context) {
+                      final bool isPositive = _outstandingAmount >= 0;
+                      final Color primaryColor = isPositive
+                          ? Colors.red[700]!
+                          : Colors.green[700]!;
+                      final Color backgroundColor = isPositive
+                          ? Colors.red[50]!
+                          : Colors.green[50]!;
+                      final Color borderColor = isPositive
+                          ? Colors.red[200]!
+                          : Colors.green[200]!;
+                      final Color iconBackgroundColor = isPositive
+                          ? Colors.red[100]!
+                          : Colors.green[100]!;
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor, width: 1.5),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: iconBackgroundColor,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.account_balance_wallet,
+                                color: primaryColor,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Outstanding Amount',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '₹${NumberFormat('#,##,##0.00').format(_outstandingAmount.abs())}',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: primaryColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ],
+              ] else ...[
+                _sectionLabel('Transaction Details'),
+                const SizedBox(height: 12),
+                _buildLargeTextField(
+                  label: 'What is this transaction about?',
+                  hint: 'e.g., Office supplies, Petrol, Tea, Salary',
+                  controller: _transactionDetailsController,
+                ),
+              ],
+              const SizedBox(height: 28),
+
+              // ── Amount ──
+              _sectionLabel('Amount'),
+              const SizedBox(height: 12),
+              _buildLargeTextField(
+                label: 'Amount in Rupees',
+                hint: 'e.g., 500',
+                keyboardType: TextInputType.number,
+                controller: _amountController,
               ),
-            ),
+              const SizedBox(height: 28),
+
+              // ── Bill photo ──
+              _sectionLabel('Bill Photo (Optional)'),
+              const SizedBox(height: 12),
+              _buildBillPhotoSection(),
+            ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSummary() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFECEFF1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFB0BEC5)!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Summary so far:',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
-              const SizedBox(width: 8),
-              Text(
-                _customerLedgerType == CustomerLedgerType.yes
-                    ? 'Customer Transaction'
-                    : 'General Transaction',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
               ),
             ],
           ),
-          if (_currentStep > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    _ledgerPaymentType == LedgerPaymentType.paymentIn
-                        ? 'Payment In'
-                        : 'Payment Out',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF455A64),
+                disabledBackgroundColor: Colors.grey[400],
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
-            ),
-          if (_currentStep > 1 && _selectedCustomerId != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    _selectedCustomerName ?? 'Customer selected',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              onPressed: _isLoading || _isUploadingImage
+                  ? null
+                  : _saveTransaction,
+              child: _isLoading || _isUploadingImage
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Save Transaction',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
-              ),
             ),
-          if (_currentStep > 2 && _amountController.text.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: const Color(0xFF455A64), size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Amount: ₹${_amountController.text}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (_currentStep > 3)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    _selectedImage != null
-                        ? Icons.check_circle
-                        : Icons.radio_button_unchecked,
-                    color: const Color(0xFF455A64),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _selectedImage != null
-                        ? 'Bill photo added'
-                        : 'No bill photo',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -1219,7 +911,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected ? color.withOpacity(0.1) : Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -1231,15 +924,15 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
         child: Row(
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
                 color: color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 22),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1247,23 +940,23 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Colors.black87,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                 ],
               ),
             ),
             if (isSelected)
-              Icon(Icons.check_circle, color: color, size: 24)
+              Icon(Icons.check_circle, color: color, size: 22)
             else
-              Icon(Icons.circle_outlined, color: Colors.grey[400], size: 24),
+              Icon(Icons.circle_outlined, color: Colors.grey[400], size: 22),
           ],
         ),
       ),
@@ -1279,15 +972,6 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
         TextField(
           controller: controller,
           keyboardType: keyboardType,
@@ -1330,7 +1014,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
         if (_selectedImage != null) ...[
           Container(
             width: double.infinity,
-            height: 300,
+            height: 220,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey[300]!),
@@ -1391,7 +1075,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
             onTap: _showImageSourceDialog,
             child: Container(
               width: double.infinity,
-              height: 200,
+              height: 160,
               decoration: BoxDecoration(
                 color: Colors.grey[50],
                 borderRadius: BorderRadius.circular(12),
@@ -1406,24 +1090,16 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                 children: [
                   Icon(
                     Icons.add_photo_alternate,
-                    size: 64,
+                    size: 48,
                     color: Colors.grey[400],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     'Tap to add bill photo',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w500,
                       color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '(Optional)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
                     ),
                   ),
                 ],

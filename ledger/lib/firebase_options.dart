@@ -50,11 +50,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyB2Nsx12qHZ3aUyeNuxVu3Uhj7w9viWous',
-    appId: '1:582085220530:android:7e757a07aa07b6be4091ab',
-    messagingSenderId: '582085220530',
-    projectId: 'ledger-prod-17fa0',
-    storageBucket: 'ledger-prod-17fa0.firebasestorage.app',
+    apiKey: 'AIzaSyC88ko2W8d0_y_jvVHDeCItoLpMPyGFWrY',
+    appId: '1:591294652866:android:acdecd77e106c53023365b',
+    messagingSenderId: '591294652866',
+    projectId: 'ledger-prod-decf8',
+    storageBucket: 'ledger-prod-decf8.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

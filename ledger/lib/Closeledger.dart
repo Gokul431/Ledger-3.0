@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -137,8 +137,12 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
 
       // Always pre-fill saleValue from Firestore (set by stock close)
       final sv = data?['saleValue'];
-      final saleValueNum = sv is int ? sv.toDouble() : (sv is double ? sv : 0.0);
-      _salesController.text = saleValueNum > 0 ? saleValueNum.toStringAsFixed(2) : '';
+      final saleValueNum = sv is int
+          ? sv.toDouble()
+          : (sv is double ? sv : 0.0);
+      _salesController.text = saleValueNum > 0
+          ? saleValueNum.toStringAsFixed(2)
+          : '';
 
       if (_ledgerClosed) {
         final denominationsMap = Map<String, dynamic>.from(
@@ -174,7 +178,6 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
           _denominationTotals[i] = 0;
         }
       }
-
     } catch (e) {
       debugPrint('Error loading ledger: $e');
       if (mounted) {
@@ -213,17 +216,8 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
       return;
     }
 
-    // Validate sales value
-    if (_salesController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter sales value'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
+    // Sales value is auto-filled from the Stock tab and can't be typed
+    // here — an empty/zero value means stock hasn't been closed yet.
     final double salesValue =
         double.tryParse(_salesController.text.replaceAll(',', '').trim()) ??
         0.0;
@@ -231,7 +225,9 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     if (salesValue <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid sales value'),
+          content: Text(
+            'Sales value not available. Please close the Stock tab first.',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -309,13 +305,13 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
           final count = int.tryParse(_controllers[i].text) ?? 0;
           // Ensure count is non-negative
           final safeCount = count < 0 ? 0 : count;
-          
+
           // Store only the count (user input)
           denominationMap[denominations[i].toString()] = safeCount;
-          
+
           // Calculate closing balance from user inputs
           closingBalance += safeCount * denominations[i];
-          
+
           // Update _denominationTotals to keep UI in sync
           _denominationTotals[i] = safeCount * denominations[i];
         }
@@ -323,7 +319,8 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         // Validate closing balance is non-negative
         if (closingBalance < 0) {
           throw Exception(
-              'Invalid closing balance: $closingBalance. Please check denomination counts.');
+            'Invalid closing balance: $closingBalance. Please check denomination counts.',
+          );
         }
 
         // Debug logging
@@ -333,87 +330,95 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         debugPrint('  Sales Value: $salesValue');
 
         // Use transaction with timeout to ensure atomic update
-        await firestore.runTransaction(
-          (transaction) async {
-            // Get document with timeout handling
-            final doc = await transaction.get(docRef).timeout(
+        await firestore
+            .runTransaction((transaction) async {
+              // Get document with timeout handling
+              final doc = await transaction
+                  .get(docRef)
+                  .timeout(
+                    timeoutDuration,
+                    onTimeout: () {
+                      throw Exception(
+                        'Network timeout. Please check your internet connection and try again.',
+                      );
+                    },
+                  );
+
+              if (!doc.exists) {
+                throw Exception('Ledger document not found');
+              }
+
+              final data = doc.data();
+              final existingLastUpdated = data?['lastUpdated'];
+
+              // Check if there's a newer update already saved
+              // Use server timestamp comparison to avoid client clock issues
+              if (existingLastUpdated != null) {
+                int existingTimestamp = 0;
+                if (existingLastUpdated is int) {
+                  existingTimestamp = existingLastUpdated;
+                } else if (existingLastUpdated is double) {
+                  existingTimestamp = existingLastUpdated.toInt();
+                } else if (existingLastUpdated is Timestamp) {
+                  existingTimestamp =
+                      existingLastUpdated.millisecondsSinceEpoch;
+                } else if (existingLastUpdated is Map) {
+                  // Handle Firestore Timestamp format (when serialized)
+                  final seconds = existingLastUpdated['_seconds'] as int? ?? 0;
+                  final nanoseconds =
+                      existingLastUpdated['_nanoseconds'] as int? ?? 0;
+                  existingTimestamp =
+                      (seconds * 1000) + (nanoseconds ~/ 1000000);
+                }
+
+                // Use server timestamp for comparison to avoid client clock issues
+                // Get current server time for accurate comparison
+                final serverTime = Timestamp.now();
+                final currentServerMillis = serverTime.millisecondsSinceEpoch;
+
+                // Allow update if our server time is newer, or if existing is more than 1 second old
+                // This handles slow network where client timestamp might be slightly behind
+                if (currentServerMillis <= existingTimestamp - 1000) {
+                  throw Exception(
+                    'A newer update was already saved. Please refresh and try again.',
+                  );
+                }
+              }
+
+              // Update the ledger document - Store only user inputs
+              // closingBalance is calculated from denominations at read time
+              final updateData = <String, dynamic>{
+                // Store user inputs only
+                'denominations': denominationMap, // User input counts
+                'saleValue': salesValue, // User input
+                'cashOut': cashOut, // User input
+                // Calculate and store closing balance from user inputs
+                'closingBalance': closingBalance,
+                // Use server timestamp to avoid client clock issues
+                'lastUpdated': FieldValue.serverTimestamp(),
+              };
+
+              if (_isEditMode) {
+                // In edit mode, update existing closed ledger
+                updateData['updatedAt'] = FieldValue.serverTimestamp();
+                updateData['status'] = 'Closed';
+                // Don't update closedAt - keep original
+              } else {
+                // First time closing
+                updateData['status'] = 'Closed';
+                updateData['closedAt'] = FieldValue.serverTimestamp();
+              }
+
+              transaction.update(docRef, updateData);
+            })
+            .timeout(
               timeoutDuration,
               onTimeout: () {
                 throw Exception(
-                    'Network timeout. Please check your internet connection and try again.');
+                  'Network timeout. Please check your internet connection and try again.',
+                );
               },
             );
-
-            if (!doc.exists) {
-              throw Exception('Ledger document not found');
-            }
-
-            final data = doc.data();
-            final existingLastUpdated = data?['lastUpdated'];
-
-            // Check if there's a newer update already saved
-            // Use server timestamp comparison to avoid client clock issues
-            if (existingLastUpdated != null) {
-              int existingTimestamp = 0;
-              if (existingLastUpdated is int) {
-                existingTimestamp = existingLastUpdated;
-              } else if (existingLastUpdated is double) {
-                existingTimestamp = existingLastUpdated.toInt();
-              } else if (existingLastUpdated is Timestamp) {
-                existingTimestamp = existingLastUpdated.millisecondsSinceEpoch;
-              } else if (existingLastUpdated is Map) {
-                // Handle Firestore Timestamp format (when serialized)
-                final seconds = existingLastUpdated['_seconds'] as int? ?? 0;
-                final nanoseconds = existingLastUpdated['_nanoseconds'] as int? ?? 0;
-                existingTimestamp = (seconds * 1000) + (nanoseconds ~/ 1000000);
-              }
-
-              // Use server timestamp for comparison to avoid client clock issues
-              // Get current server time for accurate comparison
-              final serverTime = Timestamp.now();
-              final currentServerMillis = serverTime.millisecondsSinceEpoch;
-
-              // Allow update if our server time is newer, or if existing is more than 1 second old
-              // This handles slow network where client timestamp might be slightly behind
-              if (currentServerMillis <= existingTimestamp - 1000) {
-                throw Exception(
-                    'A newer update was already saved. Please refresh and try again.');
-              }
-            }
-
-            // Update the ledger document - Store only user inputs
-            // closingBalance is calculated from denominations at read time
-            final updateData = <String, dynamic>{
-              // Store user inputs only
-              'denominations': denominationMap, // User input counts
-              'saleValue': salesValue, // User input
-              'cashOut': cashOut, // User input
-              // Calculate and store closing balance from user inputs
-              'closingBalance': closingBalance,
-              // Use server timestamp to avoid client clock issues
-              'lastUpdated': FieldValue.serverTimestamp(),
-            };
-
-            if (_isEditMode) {
-              // In edit mode, update existing closed ledger
-              updateData['updatedAt'] = FieldValue.serverTimestamp();
-              updateData['status'] = 'Closed';
-              // Don't update closedAt - keep original
-            } else {
-              // First time closing
-              updateData['status'] = 'Closed';
-              updateData['closedAt'] = FieldValue.serverTimestamp();
-            }
-
-            transaction.update(docRef, updateData);
-          },
-        ).timeout(
-          timeoutDuration,
-          onTimeout: () {
-            throw Exception(
-                'Network timeout. Please check your internet connection and try again.');
-          },
-        );
 
         // Success - update local state
         _closingBalance = closingBalance;
@@ -442,11 +447,14 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
         return;
       } catch (e) {
         retryCount++;
-        debugPrint('Error closing ledger (attempt $retryCount/$maxRetries): $e');
+        debugPrint(
+          'Error closing ledger (attempt $retryCount/$maxRetries): $e',
+        );
 
         // Check if it's a network-related error that we should retry
         final errorString = e.toString().toLowerCase();
-        final isNetworkError = errorString.contains('network') ||
+        final isNetworkError =
+            errorString.contains('network') ||
             errorString.contains('timeout') ||
             errorString.contains('connection') ||
             errorString.contains('unavailable') ||
@@ -454,7 +462,8 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
             errorString.contains('socketexception');
 
         // Don't retry for validation errors or timestamp conflicts
-        final isNonRetryableError = errorString.contains('newer update') ||
+        final isNonRetryableError =
+            errorString.contains('newer update') ||
             errorString.contains('invalid') ||
             errorString.contains('not found') ||
             errorString.contains('collection not available');
@@ -463,7 +472,7 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
           // Final attempt failed or non-retryable error
           if (mounted) {
             String errorMessage = _getUserFriendlyErrorMessage(e);
-            
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(errorMessage),
@@ -507,10 +516,11 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
 
   String _getUserFriendlyErrorMessage(dynamic error) {
     final errorString = error.toString().toLowerCase();
-    
+
     if (errorString.contains('network') || errorString.contains('timeout')) {
       return 'Network connection issue. Please check your internet and try again.';
-    } else if (errorString.contains('connection') || errorString.contains('unavailable')) {
+    } else if (errorString.contains('connection') ||
+        errorString.contains('unavailable')) {
       return 'Unable to connect to server. Please check your internet connection.';
     } else if (errorString.contains('newer update')) {
       return 'A newer update was already saved. Please refresh and try again.';
@@ -768,6 +778,339 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     super.dispose();
   }
 
+  Widget _openingBalanceCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF78909C), Color(0xFF546E7A)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.account_balance,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Opening Balance',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '₹${NumberFormat('#,##,##0').format(_openingBalance)}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cashOutField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Cash Out',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '*',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.red[600],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _cashOutController,
+          keyboardType: TextInputType.number,
+          enabled: !_ledgerClosed || _isEditMode,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Enter cash out amount...',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            filled: true,
+            fillColor: (_ledgerClosed && !_isEditMode)
+                ? Colors.grey[200]
+                : Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFF455A64), width: 2),
+            ),
+            contentPadding: const EdgeInsets.all(12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Auto-filled from the Stock tab's closing sale value — display only.
+  Widget _salesValueDisplay() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Sales Value',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _salesController,
+          enabled: false,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey[800],
+            fontWeight: FontWeight.w600,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Not available yet',
+            hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            filled: true,
+            fillColor: Colors.grey[100],
+            prefixIcon: Icon(
+              Icons.lock_outline,
+              size: 18,
+              color: Colors.grey[500],
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            contentPadding: const EdgeInsets.all(12),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Auto-filled from the Stock tab — cannot be edited here.',
+          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+        ),
+      ],
+    );
+  }
+
+  Widget _denominationSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Denomination Count',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _ledgerClosed && !_isEditMode
+              ? 'Ledger closed - View only'
+              : _isEditMode
+              ? 'Editing closed ledger values'
+              : 'Enter the count of each denomination',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 12),
+
+        // Single column, one row per denomination — the count field
+        // flexes to fill the row on wide screens instead of leaving
+        // blank space or splitting into a multi-column grid.
+        ...List.generate(denominations.length, (i) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[200]!),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 64,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF78909C), Color(0xFF546E7A)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '₹${denominations[i]}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Count — flexible, fills the row on wide screens (a
+                // bigger, easier target) instead of leaving blank space.
+                Expanded(
+                  child: TextField(
+                    controller: _controllers[i],
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    enabled: !_ledgerClosed || _isEditMode,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      filled: true,
+                      fillColor: (_ledgerClosed && !_isEditMode)
+                          ? Colors.grey[200]
+                          : Colors.grey[50],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF455A64),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onTap: () {
+                      // Select all text when tapped, especially if it's "0"
+                      if (_controllers[i].text == '0' ||
+                          _controllers[i].text.isEmpty) {
+                        _controllers[i].clear();
+                      } else {
+                        _controllers[i].selection = TextSelection(
+                          baseOffset: 0,
+                          extentOffset: _controllers[i].text.length,
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Total — fixed width, right aligned
+                SizedBox(
+                  width: 100,
+                  child: Text(
+                    '₹${NumberFormat('#,##,##0').format(_denominationTotals[i])}',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+
+        const SizedBox(height: 8),
+
+        // Total Cash Card
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.green[400]!, Colors.green[600]!],
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total Cash',
+                    style: TextStyle(color: Colors.white, fontSize: 15),
+                  ),
+                  Text(
+                    '₹${NumberFormat('#,##,##0').format(_grandTotal)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total Notes',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  Text(
+                    '$_totalNotes notes',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -806,387 +1149,41 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                 ),
               ]
             : _isEditMode
-                ? [
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Cancel Edit',
-                      onPressed: () {
-                        _cancelEdit();
-                      },
-                    ),
-                  ]
-                : null,
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Cancel Edit',
+                  onPressed: () {
+                    _cancelEdit();
+                  },
+                ),
+              ]
+            : null,
       ),
+      // Single column, full width — Cash Out first, then Denominations
+      // (as a responsive grid so rows don't stretch with a huge gap on
+      // wide screens), then the read-only Sales Value. No centering/
+      // capping — the page uses the full screen width on any device.
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Opening Balance Card
-                  Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [const Color(0xFF78909C)!, const Color(0xFF546E7A)!],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.account_balance,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Opening Balance',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '₹${NumberFormat('#,##,##0').format(_openingBalance)}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _openingBalanceCard(),
                   ),
-
-                  // Denomination Section
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Denomination Count',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _ledgerClosed && !_isEditMode
-                              ? 'Ledger closed - View only'
-                              : _isEditMode
-                                  ? 'Editing closed ledger values'
-                                  : 'Enter the count of each denomination',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        ...List.generate(denominations.length, (i) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey[200]!),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 55,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        const Color(0xFF78909C)!,
-                                        const Color(0xFF546E7A)!,
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '₹${denominations[i]}',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  '×',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Container(
-                                  width: 70,
-                                  decoration: BoxDecoration(
-                                    color: (_ledgerClosed && !_isEditMode)
-                                        ? Colors.grey[200]
-                                        : Colors.grey[50],
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.grey[300]!,
-                                    ),
-                                  ),
-                                  child: TextField(
-                                    controller: _controllers[i],
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    enabled: !_ledgerClosed || _isEditMode,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    decoration: const InputDecoration(
-                                      hintText: '0',
-                                      contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 10,
-                                      ),
-                                      border: InputBorder.none,
-                                    ),
-                                    onTap: () {
-                                      // Select all text when tapped, especially if it's "0"
-                                      if (_controllers[i].text == '0' || _controllers[i].text.isEmpty) {
-                                        _controllers[i].clear();
-                                      } else {
-                                        _controllers[i].selection = TextSelection(
-                                          baseOffset: 0,
-                                          extentOffset: _controllers[i].text.length,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const Spacer(),
-                                const Text(
-                                  '=',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  '₹${NumberFormat('#,##,##0').format(_denominationTotals[i])}',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green[700],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-
-                        const SizedBox(height: 8),
-
-                        // Total Cash Card
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Colors.green[400]!, Colors.green[600]!],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Total Cash',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  Text(
-                                    '₹${NumberFormat('#,##,##0').format(_grandTotal)}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Total Notes',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$_totalNotes notes',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
+                        _cashOutField(),
                         const SizedBox(height: 20),
-
-                        // Sales Value (Required)
-                        Row(
-                          children: [
-                            const Text(
-                              'Sales Value',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '*',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _salesController,
-                          keyboardType: TextInputType.number,
-                          enabled: !_ledgerClosed || _isEditMode,
-                          style: const TextStyle(fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: 'Enter today\'s sales value...',
-                            hintStyle: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[400],
-                            ),
-                            filled: true,
-                            fillColor: (_ledgerClosed && !_isEditMode)
-                                ? Colors.grey[200]
-                                : Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF455A64),
-                                width: 2,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.all(12),
-                          ),
-                        ),
-
+                        _denominationSection(),
                         const SizedBox(height: 20),
-
-                        // Cash Out (Required)
-                        Row(
-                          children: [
-                            const Text(
-                              'Cash Out',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '*',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _cashOutController,
-                          keyboardType: TextInputType.number,
-                          enabled: !_ledgerClosed || _isEditMode,
-                          style: const TextStyle(fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: 'Enter cash out amount...',
-                            hintStyle: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[400],
-                            ),
-                            filled: true,
-                            fillColor: (_ledgerClosed && !_isEditMode)
-                                ? Colors.grey[200]
-                                : Colors.white,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(color: Colors.grey[300]!),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF455A64),
-                                width: 2,
-                              ),
-                            ),
-                            contentPadding: const EdgeInsets.all(12),
-                          ),
-                        ),
-
+                        _salesValueDisplay(),
                         const SizedBox(height: 80),
                       ],
                     ),
@@ -1237,11 +1234,12 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                     Expanded(
                       flex: 3,
                       child: ElevatedButton(
-                        onPressed: (_isSaving || (_ledgerClosed && !_isEditMode))
+                        onPressed:
+                            (_isSaving || (_ledgerClosed && !_isEditMode))
                             ? null
                             : _isEditMode
-                                ? _showConfirmUpdateDialog
-                                : _showConfirmCloseDialog,
+                            ? _showConfirmUpdateDialog
+                            : _showConfirmCloseDialog,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF455A64),
                           foregroundColor: Colors.white,
@@ -1263,7 +1261,8 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
                                       valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
+                                        Colors.white,
+                                      ),
                                     ),
                                   ),
                                   SizedBox(width: 8),
@@ -1280,12 +1279,16 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    _isEditMode ? Icons.save : Icons.check_circle,
+                                    _isEditMode
+                                        ? Icons.save
+                                        : Icons.check_circle,
                                     size: 18,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    _isEditMode ? 'Save Changes' : 'Close Ledger',
+                                    _isEditMode
+                                        ? 'Save Changes'
+                                        : 'Close Ledger',
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -214,7 +214,11 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           ),
           title: Row(
             children: [
-              Icon(Icons.info_outline, color: const Color(0xFF546E7A), size: 24),
+              Icon(
+                Icons.info_outline,
+                color: const Color(0xFF546E7A),
+                size: 24,
+              ),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -452,17 +456,17 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       return Stream.empty();
     }
 
-    // For employees: Show only last 10 days
+    // For employees: Show only last 2 days
     // For admin (client): Show all dates
     if (_userRole == 'employee') {
-      final tenDaysAgo = DateTime.now().subtract(const Duration(days: 10));
-      final tenDaysAgoTimestamp = Timestamp.fromDate(tenDaysAgo);
-      
+      final twoDaysAgo = DateTime.now().subtract(const Duration(days: 2));
+      final twoDaysAgoTimestamp = Timestamp.fromDate(twoDaysAgo);
+
       return _firestore
           .collection(_selectedShopCollection!)
           .doc('ledgers')
           .collection('dates')
-          .where('createdAt', isGreaterThanOrEqualTo: tenDaysAgoTimestamp)
+          .where('createdAt', isGreaterThanOrEqualTo: twoDaysAgoTimestamp)
           .orderBy('createdAt', descending: true)
           .snapshots();
     }
@@ -1115,7 +1119,8 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       final closingBalance = (ledger['closingBalance'] ?? 0).toDouble();
       final saleValue = (ledger['saleValue'] ?? 0).toDouble();
       final cashOut = (ledger['cashOut'] ?? 0).toDouble(); // ✅ ADD CASH OUT
-      final isLedgerClosed = (ledger['status'] ?? 'Open').toString().toLowerCase() == 'closed';
+      final isLedgerClosed =
+          (ledger['status'] ?? 'Open').toString().toLowerCase() == 'closed';
 
       // Get all transactions for this ledger date
       final transactionsSnapshot = await _firestore
@@ -1158,7 +1163,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
 
       // ✅ Add closing balance to credit (0 if not closed) (EXACT MATCH TO PDF)
       final finalClosingBalance = isLedgerClosed ? closingBalance : 0.0;
-      
+
       // ✅ Grand Total Credit = Total Credit (includes cash out) + Closing Balance
       // This matches the PDF export formula exactly
       final grandTotalCredit = totalCredit + finalClosingBalance;
@@ -1198,24 +1203,16 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           ),
           title: const Text(
             'Delete ledger?',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           content: Text(
             'Ledger date: $ledgerDate\n\nThis will delete this ledger and all its transactions permanently.',
-            style: const TextStyle(
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontSize: 14),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontSize: 14),
-              ),
+              child: const Text('Cancel', style: TextStyle(fontSize: 14)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -1228,10 +1225,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
               ),
               child: const Text(
                 'Delete',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -1246,9 +1240,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
@@ -1446,17 +1438,23 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                         height: isLandscape ? 16 : 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(statusColor!),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            statusColor!,
+                          ),
                         ),
                       );
                     }
 
                     final balanceDifference = snapshot.data ?? 0.0;
                     final isNegative = balanceDifference < 0;
-                    final displayColor = isNegative ? Colors.red[600] : Colors.green[600];
-                    
+                    final displayColor = isNegative
+                        ? Colors.red[600]
+                        : Colors.green[600];
+
                     // Format with Indian numbering system (lakhs, crores) - same as PDF export
-                    final formattedAmount = NumberFormat('#,##,##0.00').format(balanceDifference.abs());
+                    final formattedAmount = NumberFormat(
+                      '#,##,##0.00',
+                    ).format(balanceDifference.abs());
 
                     return Row(
                       children: [
@@ -1559,144 +1557,156 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           SizedBox(width: isLandscape ? 12 : 8),
         ],
       ),
-      body: Column(
-        children: [
-          // Admin: Shop Selector Dropdown
-          if (_userRole == 'client')
-            _buildShopSelector(isLandscape)
-          // Employee: Shop Display
-          else if (_userRole == 'employee')
-            _buildEmployeeShopDisplay(isLandscape),
+      // Capped to a comfortable reading width and centered — a no-op on
+      // phones (narrower than the cap), but keeps the row content
+      // (date/status/amount) from spreading edge-to-edge on tablets.
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            children: [
+              // Admin: Shop Selector Dropdown
+              if (_userRole == 'client')
+                _buildShopSelector(isLandscape)
+              // Employee: Shop Display
+              else if (_userRole == 'employee')
+                _buildEmployeeShopDisplay(isLandscape),
 
-          // Expandable Search Panel
-          _buildSearchPanel(isLandscape),
+              // Expandable Search Panel
+              _buildSearchPanel(isLandscape),
 
-          // Horizontal Filter Bar
-          _buildFilterBar(isLandscape),
+              // Horizontal Filter Bar
+              _buildFilterBar(isLandscape),
 
-          // Ledger List
-          Expanded(
-            child:
-                _selectedShopCollection == null ||
-                    _selectedShopCollection!.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.store,
-                          size: isLandscape ? 56 : 64,
-                          color: Colors.grey[400],
+              // Ledger List
+              Expanded(
+                child:
+                    _selectedShopCollection == null ||
+                        _selectedShopCollection!.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.store,
+                              size: isLandscape ? 56 : 64,
+                              color: Colors.grey[400],
+                            ),
+                            SizedBox(height: isLandscape ? 12 : 16),
+                            Text(
+                              'No shop selected',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 16 : 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            SizedBox(height: isLandscape ? 6 : 8),
+                            Text(
+                              'Please select a shop from dropdown',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 13 : 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: isLandscape ? 12 : 16),
-                        Text(
-                          'No shop selected',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 16 : 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        SizedBox(height: isLandscape ? 6 : 8),
-                        Text(
-                          'Please select a shop from dropdown',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 13 : 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : StreamBuilder<QuerySnapshot>(
-                    stream: _getLedgersStream(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return _buildLoadingShimmer(isLandscape);
-                      }
-                      if (snapshot.hasError) {
-                        return const Center(
-                          child: Text('Error loading ledgers.'),
-                        );
-                      }
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.description_outlined,
-                                size: isLandscape ? 56 : 64,
-                                color: Colors.grey[400],
+                      )
+                    : StreamBuilder<QuerySnapshot>(
+                        stream: _getLedgersStream(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return _buildLoadingShimmer(isLandscape);
+                          }
+                          if (snapshot.hasError) {
+                            return const Center(
+                              child: Text('Error loading ledgers.'),
+                            );
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.description_outlined,
+                                    size: isLandscape ? 56 : 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  SizedBox(height: isLandscape ? 12 : 16),
+                                  Text(
+                                    'No ledgers found',
+                                    style: TextStyle(
+                                      fontSize: isLandscape ? 16 : 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  SizedBox(height: isLandscape ? 6 : 8),
+                                  Text(
+                                    'Tap the + icon to create one',
+                                    style: TextStyle(
+                                      fontSize: isLandscape ? 13 : 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              SizedBox(height: isLandscape ? 12 : 16),
-                              Text(
-                                'No ledgers found',
-                                style: TextStyle(
-                                  fontSize: isLandscape ? 16 : 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
-                                ),
+                            );
+                          }
+                          // Apply filters
+                          final filteredDocs = _filterLedgers(
+                            snapshot.data!.docs,
+                          );
+                          if (filteredDocs.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: isLandscape ? 56 : 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  SizedBox(height: isLandscape ? 12 : 16),
+                                  Text(
+                                    'No ledgers match your filters',
+                                    style: TextStyle(
+                                      fontSize: isLandscape ? 15 : 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              SizedBox(height: isLandscape ? 6 : 8),
-                              Text(
-                                'Tap the + icon to create one',
-                                style: TextStyle(
-                                  fontSize: isLandscape ? 13 : 14,
-                                  color: Colors.grey[600],
-                                ),
+                            );
+                          }
+                          return RefreshIndicator(
+                            onRefresh: _handleRefresh,
+                            child: Container(
+                              color: Colors.white,
+                              child: ListView.builder(
+                                itemCount: filteredDocs.length,
+                                itemBuilder: (context, index) {
+                                  final ledger =
+                                      filteredDocs[index].data()
+                                          as Map<String, dynamic>;
+                                  return _buildLedgerItem(
+                                    context,
+                                    ledger,
+                                    isLandscape,
+                                  );
+                                },
                               ),
-                            ],
-                          ),
-                        );
-                      }
-                      // Apply filters
-                      final filteredDocs = _filterLedgers(snapshot.data!.docs);
-                      if (filteredDocs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search_off,
-                                size: isLandscape ? 56 : 64,
-                                color: Colors.grey[400],
-                              ),
-                              SizedBox(height: isLandscape ? 12 : 16),
-                              Text(
-                                'No ledgers match your filters',
-                                style: TextStyle(
-                                  fontSize: isLandscape ? 15 : 16,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-                      return RefreshIndicator(
-                        onRefresh: _handleRefresh,
-                        child: Container(
-                          color: Colors.white,
-                          child: ListView.builder(
-                            itemCount: filteredDocs.length,
-                            itemBuilder: (context, index) {
-                              final ledger =
-                                  filteredDocs[index].data()
-                                      as Map<String, dynamic>;
-                              return _buildLedgerItem(
-                                context,
-                                ledger,
-                                isLandscape,
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       bottomNavigationBar: const AppBottomBar(currentIndex: 0),
     );

@@ -3,16 +3,16 @@
     "platforms": {
       "android": {
         "default": {
-          "projectId": "ledger-prod-17fa0",
-          "appId": "1:582085220530:android:7e757a07aa07b6be4091ab",
+          "projectId": "ledger-prod-decf8",
+          "appId": "1:591294652866:android:acdecd77e106c53023365b",
           "fileOutput": "android/app/google-services.json"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "ledger-prod-17fa0",
+          "projectId": "ledger-prod-decf8",
           "configurations": {
-            "android": "1:582085220530:android:7e757a07aa07b6be4091ab",
+            "android": "1:591294652866:android:acdecd77e106c53023365b",
             "ios": "1:582085220530:ios:c2f96a90aaf32ad94091ab"
           }
         }

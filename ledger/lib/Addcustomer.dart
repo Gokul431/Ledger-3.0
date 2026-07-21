@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -13,8 +13,6 @@ class AddCustomer extends StatefulWidget {
 
 class _AddCustomerState extends State<AddCustomer> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  int _currentStep = 0;
 
   // User & Shop related
   String? _userRole;
@@ -122,50 +120,6 @@ class _AddCustomerState extends State<AddCustomer> {
     }
   }
 
-  void _nextStep() {
-    if (_currentStep == 0 && _userRole == 'client') {
-      if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
-        _showError('Please select a shop');
-        return;
-      }
-      setState(() => _currentStep = 1);
-    } else if ((_currentStep == 0 && _userRole == 'employee') ||
-        (_currentStep == 1 && _userRole == 'client')) {
-      if (nameController.text.trim().isEmpty) {
-        _showError('Please enter customer name');
-        return;
-      }
-      setState(() => _currentStep++);
-    } else if ((_currentStep == 1 && _userRole == 'employee') ||
-        (_currentStep == 2 && _userRole == 'client')) {
-      if (customerType == null) {
-        _showError('Please select customer type');
-        return;
-      }
-      setState(() => _currentStep++);
-    } else if ((_currentStep == 2 && _userRole == 'employee') ||
-        (_currentStep == 3 && _userRole == 'client')) {
-      if (mobileController.text.isEmpty || mobileController.text.length != 10) {
-        _showError('Please enter valid 10-digit mobile number');
-        return;
-      }
-      setState(() => _currentStep++);
-    } else if ((_currentStep == 3 && _userRole == 'employee') ||
-        (_currentStep == 4 && _userRole == 'client')) {
-      if (dateController.text.isEmpty) {
-        _showError('Please select opening balance date');
-        return;
-      }
-      setState(() => _currentStep++);
-    }
-  }
-
-  void _previousStep() {
-    if (_currentStep > 0) {
-      setState(() => _currentStep--);
-    }
-  }
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
@@ -182,6 +136,32 @@ class _AddCustomerState extends State<AddCustomer> {
   }
 
   Future<void> _saveCustomer() async {
+    if (_userRole == 'client' &&
+        (_selectedShopCollection == null || _selectedShopCollection!.isEmpty)) {
+      _showError('Please select a shop');
+      return;
+    }
+
+    if (nameController.text.trim().isEmpty) {
+      _showError('Please enter customer name');
+      return;
+    }
+
+    if (customerType == null) {
+      _showError('Please select customer type');
+      return;
+    }
+
+    if (mobileController.text.isEmpty || mobileController.text.length != 10) {
+      _showError('Please enter valid 10-digit mobile number');
+      return;
+    }
+
+    if (dateController.text.isEmpty) {
+      _showError('Please select opening balance date');
+      return;
+    }
+
     if (amountController.text.trim().isEmpty) {
       _showError('Please enter opening balance amount');
       return;
@@ -279,50 +259,14 @@ class _AddCustomerState extends State<AddCustomer> {
     super.dispose();
   }
 
-  Widget _buildStepIndicator() {
-    final steps = _userRole == 'client'
-        ? ['Shop', 'Name', 'Type', 'Mobile', 'Date', 'Amount']
-        : ['Name', 'Type', 'Mobile', 'Date', 'Amount'];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(steps.length, (index) {
-        final isActive = index <= _currentStep;
-        return Expanded(
-          child: Column(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive ? const Color(0xFF455A64) : Colors.grey[300],
-                ),
-                child: Center(
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                steps[index],
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                  color: isActive ? Colors.black87 : Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        );
-      }),
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: Colors.black87,
+      ),
     );
   }
 
@@ -339,14 +283,7 @@ class _AddCustomerState extends State<AddCustomer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
+        _sectionLabel(label),
         const SizedBox(height: 12),
         TextField(
           controller: controller,
@@ -398,7 +335,8 @@ class _AddCustomerState extends State<AddCustomer> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: isSelected ? color.withOpacity(0.1) : Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -410,15 +348,15 @@ class _AddCustomerState extends State<AddCustomer> {
         child: Row(
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
                 color: color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 22),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,23 +364,23 @@ class _AddCustomerState extends State<AddCustomer> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: Colors.black87,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                 ],
               ),
             ),
             if (isSelected)
-              Icon(Icons.check_circle, color: color, size: 24)
+              Icon(Icons.check_circle, color: color, size: 22)
             else
-              Icon(Icons.circle_outlined, color: Colors.grey[400], size: 24),
+              Icon(Icons.circle_outlined, color: Colors.grey[400], size: 22),
           ],
         ),
       ),
@@ -453,14 +391,7 @@ class _AddCustomerState extends State<AddCustomer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Select Shop',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
+        _sectionLabel('Shop'),
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
@@ -528,8 +459,6 @@ class _AddCustomerState extends State<AddCustomer> {
       );
     }
 
-    final maxStep = _userRole == 'client' ? 5 : 4;
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -542,233 +471,126 @@ class _AddCustomerState extends State<AddCustomer> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
+      // Single scrollable page, full width, every field visible at once —
+      // no step wizard, no side-by-side/grid layout.
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Container(
-            width: double.infinity,
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStepIndicator(),
-                  const SizedBox(height: 32),
-                  if (_userRole == 'client' && _currentStep == 0) ...[
-                    const Text(
-                      'Which shop to add customer?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Select the shop where customer needs to be added',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildShopSelector(),
-                  ] else if ((_userRole == 'client' && _currentStep == 1) ||
-                      (_userRole == 'employee' && _currentStep == 0)) ...[
-                    const Text(
-                      'What is the customer name?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Enter the full name of the customer',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildLargeTextField(
-                      label: 'Customer Name',
-                      hint: 'e.g., Raj Kumar',
-                      controller: nameController,
-                      icon: Icons.person_outline,
-                    ),
-                  ] else if ((_userRole == 'client' && _currentStep == 2) ||
-                      (_userRole == 'employee' && _currentStep == 1)) ...[
-                    const Text(
-                      'What type of customer?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Select the customer type',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildOptionCard(
-                      title: 'Retail',
-                      subtitle: 'Individual small purchases',
-                      icon: Icons.store_outlined,
-                      isSelected: customerType == 'Retail',
-                      onTap: () => setState(() => customerType = 'Retail'),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildOptionCard(
-                      title: 'Wholesale',
-                      subtitle: 'Bulk purchases',
-                      icon: Icons.warehouse_outlined,
-                      isSelected: customerType == 'Wholesale',
-                      onTap: () => setState(() => customerType = 'Wholesale'),
-                      color: Colors.orange,
-                    ),
-                  ] else if ((_userRole == 'client' && _currentStep == 3) ||
-                      (_userRole == 'employee' && _currentStep == 2)) ...[
-                    const Text(
-                      'What is the mobile number?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Enter 10-digit mobile number',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildLargeTextField(
-                      label: 'Mobile Number',
-                      hint: 'e.g., 9876543210',
-                      controller: mobileController,
-                      icon: Icons.phone_outlined,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(10),
-                      ],
-                    ),
-                  ] else if ((_userRole == 'client' && _currentStep == 4) ||
-                      (_userRole == 'employee' && _currentStep == 3)) ...[
-                    const Text(
-                      'When is the opening date?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Select the opening balance date',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildLargeTextField(
-                      label: 'Opening Balance Date',
-                      hint: 'Tap to select date',
-                      controller: dateController,
-                      icon: Icons.calendar_today_outlined,
-                      readOnly: true,
-                      onTap: () => _selectDate(context),
-                    ),
-                  ] else if ((_userRole == 'client' && _currentStep == 5) ||
-                      (_userRole == 'employee' && _currentStep == 4)) ...[
-                    const Text(
-                      'What is the opening balance?',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Enter the opening balance amount',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildLargeTextField(
-                      label: 'Opening Balance Amount',
-                      hint: 'e.g., 5000',
-                      controller: amountController,
-                      icon: Icons.currency_rupee,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'^\d+\.?\d{0,2}'),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 40),
-                  Row(
-                    children: [
-                      if (_currentStep > 0)
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[300],
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: _previousStep,
-                            child: const Text(
-                              'Back',
-                              style: TextStyle(
-                                color: Colors.black87,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (_currentStep > 0) const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF455A64),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: _isLoading
-                              ? null
-                              : (_currentStep == maxStep
-                                    ? _saveCustomer
-                                    : _nextStep),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : Text(
-                                  _currentStep == maxStep ? 'Save' : 'Next',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_userRole == 'client') ...[
+                _buildShopSelector(),
+                const SizedBox(height: 24),
+              ],
+
+              _buildLargeTextField(
+                label: 'Customer Name',
+                hint: 'e.g., Raj Kumar',
+                controller: nameController,
+                icon: Icons.person_outline,
+              ),
+              const SizedBox(height: 24),
+
+              _sectionLabel('Customer Type'),
+              const SizedBox(height: 12),
+              _buildOptionCard(
+                title: 'Retail',
+                subtitle: 'Individual small purchases',
+                icon: Icons.store_outlined,
+                isSelected: customerType == 'Retail',
+                onTap: () => setState(() => customerType = 'Retail'),
+              ),
+              const SizedBox(height: 10),
+              _buildOptionCard(
+                title: 'Wholesale',
+                subtitle: 'Bulk purchases',
+                icon: Icons.warehouse_outlined,
+                isSelected: customerType == 'Wholesale',
+                onTap: () => setState(() => customerType = 'Wholesale'),
+                color: Colors.orange,
+              ),
+              const SizedBox(height: 24),
+
+              _buildLargeTextField(
+                label: 'Mobile Number',
+                hint: 'e.g., 9876543210',
+                controller: mobileController,
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              _buildLargeTextField(
+                label: 'Opening Balance Date',
+                hint: 'Tap to select date',
+                controller: dateController,
+                icon: Icons.calendar_today_outlined,
+                readOnly: true,
+                onTap: () => _selectDate(context),
+              ),
+              const SizedBox(height: 24),
+
+              _buildLargeTextField(
+                label: 'Opening Balance Amount',
+                hint: 'e.g., 5000',
+                controller: amountController,
+                icon: Icons.currency_rupee,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF455A64),
+                disabledBackgroundColor: Colors.grey[400],
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: _isLoading ? null : _saveCustomer,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Save Customer',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ),

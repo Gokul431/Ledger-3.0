@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -250,6 +250,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => SafeArea(
         child: Container(
+          width: double.infinity,
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.7,
           ),
@@ -274,7 +275,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   ),
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     child: Column(
                       children: [
                         Text(
@@ -291,7 +295,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'Customer Options',
-                          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
@@ -324,25 +331,36 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                               if (!snapshot.hasData) {
                                 return const SizedBox.shrink();
                               }
-                              final data = snapshot.data!.data() as Map<String, dynamic>?;
-                              final openingAmount = (data?['openingAmount'] ?? 0).toDouble();
-                              
+                              final data =
+                                  snapshot.data!.data()
+                                      as Map<String, dynamic>?;
+                              final openingAmount =
+                                  (data?['openingAmount'] ?? 0).toDouble();
+
                               return _buildOptionTile(
                                 icon: Icons.account_balance_wallet,
                                 title: 'Edit Opening Amount',
-                                subtitle: 'Current: ₹${NumberFormat('#,##,##0.00').format(openingAmount)}',
+                                subtitle:
+                                    'Current: ₹${NumberFormat('#,##,##0.00').format(openingAmount)}',
                                 color: Colors.orange[700]!,
                                 onTap: () {
                                   Navigator.pop(context);
-                                  _showEditOpeningAmountDialog(customerId, openingAmount);
+                                  _showEditOpeningAmountDialog(
+                                    customerId,
+                                    openingAmount,
+                                  );
                                 },
                               );
                             },
                           ),
                           _buildOptionTile(
-                            icon: isCurrentlyActive ? Icons.check_circle : Icons.cancel,
+                            icon: isCurrentlyActive
+                                ? Icons.check_circle
+                                : Icons.cancel,
                             title: isCurrentlyActive ? 'Active' : 'Inactive',
-                            color: isCurrentlyActive ? Colors.green : Colors.red,
+                            color: isCurrentlyActive
+                                ? Colors.green
+                                : Colors.red,
                             trailing: Switch(
                               value: isCurrentlyActive,
                               activeThumbColor: Colors.green,
@@ -363,7 +381,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                             },
                           ),
                           // Extra bottom padding for safe area
-                          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+                          SizedBox(
+                            height: MediaQuery.of(context).padding.bottom + 8,
+                          ),
                         ],
                       ),
                     ),
@@ -416,14 +436,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Edit name',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 300),
@@ -529,10 +545,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           ),
           title: const Text(
             'Edit Opening Amount',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -548,8 +561,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'New opening amount',
                   hintText: 'Enter amount',
@@ -559,10 +573,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               const SizedBox(height: 8),
               Text(
                 'This will update the outstanding balance calculation.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ],
           ),
@@ -573,8 +584,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final amountText =
-                    controller.text.trim().replaceAll(',', '');
+                final amountText = controller.text.trim().replaceAll(',', '');
                 final newAmount = double.tryParse(amountText);
 
                 if (newAmount == null) {
@@ -611,7 +621,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           .collection('list')
           .doc(customerId)
           .update({'openingAmount': newAmount});
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1168,167 +1178,177 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           SizedBox(width: isLandscape ? 12 : 8),
         ],
       ),
-      body: Column(
-        children: [
-          _buildSearchPanel(isLandscape),
-          _buildShopSelector(isLandscape),
-          _buildFilterBar(isLandscape),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  _selectedShopCollection != null &&
-                      _selectedShopCollection!.isNotEmpty
-                  ? firestore
-                        .collection(_selectedShopCollection!)
-                        .doc('customers')
-                        .collection('list')
-                        .orderBy('createdAt', descending: true)
-                        .snapshots()
-                  : Stream.empty(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    _selectedShopCollection != null) {
-                  return _buildLoadingShimmer(isLandscape);
-                }
+      // Capped to a comfortable reading width and centered — a no-op on
+      // phones (narrower than the cap), but keeps the row content
+      // (name/last-transaction/amount) from spreading edge-to-edge on
+      // tablets.
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Column(
+            children: [
+              _buildSearchPanel(isLandscape),
+              _buildShopSelector(isLandscape),
+              _buildFilterBar(isLandscape),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream:
+                      _selectedShopCollection != null &&
+                          _selectedShopCollection!.isNotEmpty
+                      ? firestore
+                            .collection(_selectedShopCollection!)
+                            .doc('customers')
+                            .collection('list')
+                            .orderBy('createdAt', descending: true)
+                            .snapshots()
+                      : Stream.empty(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        _selectedShopCollection != null) {
+                      return _buildLoadingShimmer(isLandscape);
+                    }
 
-                if (_selectedShopCollection == null ||
-                    _selectedShopCollection!.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.store,
-                          size: isLandscape ? 56 : 64,
-                          color: Colors.grey[400],
+                    if (_selectedShopCollection == null ||
+                        _selectedShopCollection!.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.store,
+                              size: isLandscape ? 56 : 64,
+                              color: Colors.grey[400],
+                            ),
+                            SizedBox(height: isLandscape ? 12 : 16),
+                            Text(
+                              'No shop selected',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 16 : 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            SizedBox(height: isLandscape ? 6 : 8),
+                            Text(
+                              'Please select a shop from Ledger page',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 13 : 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: isLandscape ? 12 : 16),
-                        Text(
-                          'No shop selected',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 16 : 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey,
-                          ),
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: isLandscape ? 56 : 64,
+                              color: Colors.red[400],
+                            ),
+                            SizedBox(height: isLandscape ? 12 : 16),
+                            Text(
+                              'Error loading customers',
+                              style: TextStyle(
+                                fontSize: isLandscape ? 16 : 18,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: isLandscape ? 6 : 8),
-                        Text(
-                          'Please select a shop from Ledger page',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 13 : 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
+                      );
+                    }
 
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: isLandscape ? 56 : 64,
-                          color: Colors.red[400],
-                        ),
-                        SizedBox(height: isLandscape ? 12 : 16),
-                        Text(
-                          'Error loading customers',
-                          style: TextStyle(
-                            fontSize: isLandscape ? 16 : 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return _buildEmptyState(isLandscape);
+                    }
 
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _buildEmptyState(isLandscape);
-                }
+                    final customers = snapshot.data!.docs;
+                    final filteredCustomers = customers.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>? ?? {};
+                      final name =
+                          data['customerName']?.toString() ??
+                          data['name']?.toString() ??
+                          'Unnamed Customer';
+                      return _matchesSearch(name);
+                    }).toList();
 
-                final customers = snapshot.data!.docs;
-                final filteredCustomers = customers.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>? ?? {};
-                  final name =
-                      data['customerName']?.toString() ??
-                      data['name']?.toString() ??
-                      'Unnamed Customer';
-                  return _matchesSearch(name);
-                }).toList();
+                    if (filteredCustomers.isEmpty) {
+                      return _buildNoSearchResults(isLandscape);
+                    }
 
-                if (filteredCustomers.isEmpty) {
-                  return _buildNoSearchResults(isLandscape);
-                }
+                    return RefreshIndicator(
+                      onRefresh: _handleRefresh,
+                      color: const Color(0xFF455A64),
+                      child: Container(
+                        color: Colors.white,
+                        child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: filteredCustomers.length,
+                          itemBuilder: (context, index) {
+                            final doc = filteredCustomers[index];
+                            final data =
+                                doc.data() as Map<String, dynamic>? ?? {};
+                            final customerId = doc.id;
+                            final name =
+                                data['customerName']?.toString() ??
+                                data['name']?.toString() ??
+                                'Unnamed Customer';
+                            final openingAmount = (data['openingAmount'] ?? 0)
+                                .toDouble();
+                            final lastTxn = data['lastTransaction'] is Timestamp
+                                ? data['lastTransaction'] as Timestamp
+                                : null;
 
-                return RefreshIndicator(
-                  onRefresh: _handleRefresh,
-                  color: const Color(0xFF455A64),
-                  child: Container(
-                    color: Colors.white,
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: filteredCustomers.length,
-                      itemBuilder: (context, index) {
-                        final doc = filteredCustomers[index];
-                        final data = doc.data() as Map<String, dynamic>? ?? {};
-                        final customerId = doc.id;
-                        final name =
-                            data['customerName']?.toString() ??
-                            data['name']?.toString() ??
-                            'Unnamed Customer';
-                        final openingAmount = (data['openingAmount'] ?? 0)
-                            .toDouble();
-                        final lastTxn = data['lastTransaction'] is Timestamp
-                            ? data['lastTransaction'] as Timestamp
-                            : null;
+                            return FutureBuilder<double>(
+                              future: _calculateOutstanding(
+                                customerId,
+                                openingAmount,
+                              ),
+                              builder: (context, outstandingSnapshot) {
+                                final outstandingAmount =
+                                    outstandingSnapshot.data ?? openingAmount;
 
-                        return FutureBuilder<double>(
-                          future: _calculateOutstanding(
-                            customerId,
-                            openingAmount,
-                          ),
-                          builder: (context, outstandingSnapshot) {
-                            final outstandingAmount =
-                                outstandingSnapshot.data ?? openingAmount;
+                                if (!_matchesFilter(
+                                  data,
+                                  lastTxn,
+                                  outstandingAmount,
+                                )) {
+                                  return const SizedBox.shrink();
+                                }
 
-                            if (!_matchesFilter(
-                              data,
-                              lastTxn,
-                              outstandingAmount,
-                            )) {
-                              return const SizedBox.shrink();
-                            }
+                                if (outstandingSnapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return _buildShimmerItem(isLandscape);
+                                }
 
-                            if (outstandingSnapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return _buildShimmerItem(isLandscape);
-                            }
-
-                            return _buildCustomerItem(
-                              context,
-                              data,
-                              customerId,
-                              name,
-                              lastTxn,
-                              outstandingAmount,
-                              isLandscape,
+                                return _buildCustomerItem(
+                                  context,
+                                  data,
+                                  customerId,
+                                  name,
+                                  lastTxn,
+                                  outstandingAmount,
+                                  isLandscape,
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       bottomNavigationBar: const AppBottomBar(currentIndex: 1),
     );
