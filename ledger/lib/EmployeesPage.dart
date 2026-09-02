@@ -1842,6 +1842,19 @@ class DeviceHistoryPage extends StatefulWidget {
 }
 
 class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
+  /// Built once in `initState` rather than inline in `build()`, so a rebuild
+  /// reuses the live listener instead of resubscribing and flashing a spinner.
+  late final Stream<DocumentSnapshot> _credentialsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _credentialsStream = FirebaseFirestore.instance
+        .collection(widget.shopData['collectionName'])
+        .doc('Credentials')
+        .snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1869,10 +1882,7 @@ class _DeviceHistoryPageState extends State<DeviceHistoryPage> {
         ),
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection(widget.shopData['collectionName'])
-            .doc('Credentials')
-            .snapshots(),
+        stream: _credentialsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

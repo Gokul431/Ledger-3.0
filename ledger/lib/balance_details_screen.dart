@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 /// 🔹 Full-screen balance details screen with rich UI, matching app style
-class BalanceDetailsScreen extends StatelessWidget {
+class BalanceDetailsScreen extends StatefulWidget {
   final String shopCollection;
   final String customerId;
 
@@ -13,6 +13,23 @@ class BalanceDetailsScreen extends StatelessWidget {
     required this.customerId,
   });
 
+  @override
+  State<BalanceDetailsScreen> createState() => _BalanceDetailsScreenState();
+}
+
+/// Stateful purely so the Firestore work below can be started once in
+/// [initState]. As a StatelessWidget the future was built inline in `build()`,
+/// so any rebuild — a rotation, the keyboard opening — refetched the customer
+/// and every one of their transactions and threw the screen back to a spinner.
+class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
+  late final Future<Map<String, dynamic>> _detailsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _detailsFuture = _loadDetails();
+  }
+
   String _formatAmount(double amount) {
     return NumberFormat('#,##,##0.00').format(amount);
   }
@@ -20,6 +37,67 @@ class BalanceDetailsScreen extends StatelessWidget {
   String _formatDate(Timestamp timestamp) {
     final date = timestamp.toDate();
     return DateFormat('dd-MMM-yyyy').format(date);
+  }
+
+  /// Loads the customer's opening amount and walks their transactions to build
+  /// the running-balance rows.
+  Future<Map<String, dynamic>> _loadDetails() async {
+    final customerSnapshot = await FirebaseFirestore.instance
+        .collection(widget.shopCollection)
+        .doc('customers')
+        .collection('list')
+        .doc(widget.customerId)
+        .get();
+
+    final customerData = (customerSnapshot.data() ?? <String, dynamic>{});
+    final openingAmount = (customerData['openingAmount'] ?? 0).toDouble();
+
+    final txSnapshot = await FirebaseFirestore.instance
+        .collection(widget.shopCollection)
+        .doc('customers')
+        .collection('list')
+        .doc(widget.customerId)
+        .collection('transactions')
+        .orderBy('createdAt')
+        .get();
+
+    double balance = openingAmount;
+    double totalIn = 0;
+    double totalOut = 0;
+
+    final List<Map<String, dynamic>> rows = [];
+
+    for (final doc in txSnapshot.docs) {
+      final data = doc.data();
+      final amount = (data['amount'] ?? 0).toDouble();
+      final isCredit = data['isCredit'] == true;
+      final createdAt = data['createdAt'] as Timestamp?;
+      final start = balance;
+
+      if (isCredit) {
+        balance += amount;
+        totalOut += amount;
+      } else {
+        balance -= amount;
+        totalIn += amount;
+      }
+
+      rows.add({
+        'date': createdAt != null ? _formatDate(createdAt) : 'N/A',
+        'type': isCredit ? 'Credit to customer' : 'Received',
+        'amount': amount,
+        'start': start,
+        'end': balance,
+      });
+    }
+
+    return {
+      'opening': openingAmount,
+      'current': balance,
+      'totalIn': totalIn,
+      'totalOut': totalOut,
+      'rows': rows,
+    };
   }
 
   @override
@@ -46,66 +124,7 @@ class BalanceDetailsScreen extends StatelessWidget {
         ),
       ),
       body: FutureBuilder<Map<String, dynamic>>(
-        future: () async {
-          final customerSnapshot = await FirebaseFirestore.instance
-              .collection(shopCollection)
-              .doc('customers')
-              .collection('list')
-              .doc(customerId)
-              .get();
-
-          final customerData =
-              (customerSnapshot.data() ?? <String, dynamic>{});
-          final openingAmount =
-              (customerData['openingAmount'] ?? 0).toDouble();
-
-          final txSnapshot = await FirebaseFirestore.instance
-              .collection(shopCollection)
-              .doc('customers')
-              .collection('list')
-              .doc(customerId)
-              .collection('transactions')
-              .orderBy('createdAt')
-              .get();
-
-          double balance = openingAmount;
-          double totalIn = 0;
-          double totalOut = 0;
-
-          final List<Map<String, dynamic>> rows = [];
-
-          for (final doc in txSnapshot.docs) {
-            final data = doc.data();
-            final amount = (data['amount'] ?? 0).toDouble();
-            final isCredit = data['isCredit'] == true;
-            final createdAt = data['createdAt'] as Timestamp?;
-            final start = balance;
-
-            if (isCredit) {
-              balance += amount;
-              totalOut += amount;
-            } else {
-              balance -= amount;
-              totalIn += amount;
-            }
-
-            rows.add({
-              'date': createdAt != null ? _formatDate(createdAt) : 'N/A',
-              'type': isCredit ? 'Credit to customer' : 'Received',
-              'amount': amount,
-              'start': start,
-              'end': balance,
-            });
-          }
-
-          return {
-            'opening': openingAmount,
-            'current': balance,
-            'totalIn': totalIn,
-            'totalOut': totalOut,
-            'rows': rows,
-          };
-        }(),
+        future: _detailsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(

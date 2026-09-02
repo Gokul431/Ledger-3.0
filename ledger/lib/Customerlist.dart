@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -29,6 +31,23 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   String? _selectedShopName;
   List<Map<String, dynamic>> _shops = [];
   bool _isLoadingShops = true;
+
+  /// The customer-list stream, built ONCE per shop instead of once per
+  /// `build()`. Creating `.snapshots()` inline in `build()` tore down and
+  /// re-established the Firestore listener on every keystroke/setState, which
+  /// reset the StreamBuilder to `waiting` and re-rendered the whole list.
+  Stream<QuerySnapshot>? _customersStream;
+  String? _customersStreamKey;
+
+  /// Memoised outstanding-balance futures, keyed by customer id. Previously a
+  /// fresh `_calculateOutstanding()` query fired for every row on every
+  /// rebuild AND every scroll frame (N+1 reads per frame). Holding the Future
+  /// keeps each customer to a single read until the data is invalidated.
+  final Map<String, Future<double>> _outstandingCache = {};
+
+  /// Debounce for the search field so we filter/rebuild once the user pauses
+  /// rather than on every character.
+  Timer? _searchDebounce;
 
   final List<String> _filterOptions = [
     'All',
@@ -123,8 +142,53 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     }
   }
 
+  /// Returns the cached customers stream, recreating it only when the selected
+  /// shop actually changes.
+  Stream<QuerySnapshot> _customersStreamFor(String? shopCollection) {
+    if (shopCollection == null || shopCollection.isEmpty) {
+      return const Stream.empty();
+    }
+    if (_customersStreamKey != shopCollection || _customersStream == null) {
+      _customersStreamKey = shopCollection;
+      _outstandingCache.clear();
+      _customersStream = FirebaseFirestore.instance
+          .collection(shopCollection)
+          .doc('customers')
+          .collection('list')
+          .orderBy('createdAt', descending: true)
+          .snapshots();
+    }
+    return _customersStream!;
+  }
+
+  /// Stable per-customer Future so the row's FutureBuilder does not refire on
+  /// rebuild/scroll.
+  ///
+  /// The cache key folds in `lastTransaction` and `openingAmount`, so when the
+  /// customer document changes (a transaction was added, opening balance
+  /// edited) the customers stream emits, the key changes, and the balance is
+  /// recomputed — no stale figures, but no redundant reads either.
+  Future<double> _outstandingFor(
+    String customerId,
+    double openingAmount,
+    Timestamp? lastTransaction,
+  ) {
+    final key =
+        '$customerId|${lastTransaction?.microsecondsSinceEpoch ?? 0}|$openingAmount';
+    final cached = _outstandingCache[key];
+    if (cached != null) return cached;
+
+    // Keep only the newest entry per customer so the map cannot grow without
+    // bound as documents change.
+    _outstandingCache.removeWhere((k, _) => k.startsWith('$customerId|'));
+    final future = _calculateOutstanding(customerId, openingAmount);
+    _outstandingCache[key] = future;
+    return future;
+  }
+
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -133,7 +197,18 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     return MediaQuery.of(context).orientation == Orientation.landscape;
   }
 
+  /// Debounced so a fast typist triggers one filter pass instead of one per
+  /// character — each pass rebuilds the entire list.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || _searchQuery == value) return;
+      setState(() => _searchQuery = value);
+    });
+  }
+
   void _toggleSearch() {
+    _searchDebounce?.cancel();
     setState(() {
       _isSearchExpanded = !_isSearchExpanded;
       if (!_isSearchExpanded) {
@@ -144,7 +219,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   }
 
   Future<void> _handleRefresh() async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Drop the memoised balances so pull-to-refresh actually refetches them.
+    _outstandingCache.clear();
     if (mounted) setState(() {});
   }
 
@@ -727,7 +803,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         ),
         child: TextField(
           controller: _searchController,
-          onChanged: (value) => setState(() => _searchQuery = value),
+          onChanged: _onSearchChanged,
           decoration: InputDecoration(
             hintText: 'Search customers...',
             hintStyle: TextStyle(
@@ -1143,8 +1219,6 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       );
     }
 
-    final firestore = FirebaseFirestore.instance;
-
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -1192,16 +1266,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               _buildFilterBar(isLandscape),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream:
-                      _selectedShopCollection != null &&
-                          _selectedShopCollection!.isNotEmpty
-                      ? firestore
-                            .collection(_selectedShopCollection!)
-                            .doc('customers')
-                            .collection('list')
-                            .orderBy('createdAt', descending: true)
-                            .snapshots()
-                      : Stream.empty(),
+                  stream: _customersStreamFor(_selectedShopCollection),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting &&
                         _selectedShopCollection != null) {
@@ -1291,6 +1356,11 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                         child: ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
                           itemCount: filteredCustomers.length,
+                          // Rows are plain, stateless cards — keeping them
+                          // alive off-screen only costs memory and rebuild
+                          // time on a long customer list.
+                          addAutomaticKeepAlives: false,
+                          addRepaintBoundaries: true,
                           itemBuilder: (context, index) {
                             final doc = filteredCustomers[index];
                             final data =
@@ -1307,9 +1377,11 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                 : null;
 
                             return FutureBuilder<double>(
-                              future: _calculateOutstanding(
+                              key: ValueKey(customerId),
+                              future: _outstandingFor(
                                 customerId,
                                 openingAmount,
+                                lastTxn,
                               ),
                               builder: (context, outstandingSnapshot) {
                                 final outstandingAmount =

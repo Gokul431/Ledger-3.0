@@ -55,6 +55,18 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   bool _isDownloading = false;
   bool _isEmployeeLogin = false;
 
+  /// Cached transactions stream. Two StreamBuilders (the list and the download
+  /// FAB) previously each built their own `.snapshots()` inline in `build()`,
+  /// so the screen re-subscribed both on every setState. Sharing one instance
+  /// keeps them on a single underlying Firestore listener — `snapshots()` is
+  /// backed by a broadcast controller, so multiple listeners are safe.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _transactionsStream;
+  String? _transactionsStreamKey;
+
+  /// Last closing balance written to Firestore, so we only issue a write when
+  /// the value actually changes rather than on every rebuild.
+  double? _lastWrittenClosing;
+
   @override
   void initState() {
     super.initState();
@@ -191,6 +203,9 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         setState(() {
           _ledgerData = data;
           _ledgerRef = doc.reference;
+          // A different ledger document may hold a different stored closing
+          // balance, so forget what we last wrote and let it be recomputed.
+          _lastWrittenClosing = null;
           _isLedgerClosed = (status == 'closed');
           _isLoading = false;
         });
@@ -203,6 +218,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
           setState(() {
             _ledgerData = null;
             _ledgerRef = null;
+            _lastWrittenClosing = null;
             _isLedgerClosed = false;
             _isLoading = false;
           });
@@ -223,29 +239,87 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   }
 
   /// ✅ FIXED: Stream of transactions without orderBy to avoid index requirement
+  ///
+  /// Cached per shop+date so repeated rebuilds reuse the same listener instead
+  /// of resubscribing.
   Stream<QuerySnapshot<Map<String, dynamic>>>? _getTransactionsStream() {
     if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
       return null;
     }
 
     final ledgerDate = DateFormat('dd-MMM-yyyy').format(widget.date);
+    final key = '$_selectedShopCollection|$ledgerDate';
+    if (_transactionsStreamKey == key && _transactionsStream != null) {
+      return _transactionsStream!;
+    }
+    _transactionsStreamKey = key;
 
-    return FirebaseFirestore.instance
+    _transactionsStream = FirebaseFirestore.instance
         .collection(_selectedShopCollection!)
         .doc('ledgers')
         .collection('transactions')
         .where('ledgerDate', isEqualTo: ledgerDate)
         .snapshots(); // ✅ Removed .orderBy to avoid index requirement
+    return _transactionsStream!;
   }
 
-  /// Update closing balance
-  Future<void> _updateClosingBalance(double newTotal) async {
+  /// Chronologically sorted transactions for the given snapshot.
+  ///
+  /// Memoised against the snapshot instance: the list only needs sorting when
+  /// Firestore emits new data, not on every rebuild. It also copies the list
+  /// first — sorting `snapshot.docs` in place mutated shared plugin state.
+  QuerySnapshot<Map<String, dynamic>>? _sortedSource;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortedCache = const [];
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _sortedTransactions(
+    QuerySnapshot<Map<String, dynamic>>? snapshot,
+  ) {
+    if (snapshot == null) return const [];
+    if (identical(_sortedSource, snapshot)) return _sortedCache;
+
+    final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.of(
+      snapshot.docs,
+    );
+    docs.sort((a, b) {
+      try {
+        final aCreated = a.data()['createdAt'] as Timestamp?;
+        final bCreated = b.data()['createdAt'] as Timestamp?;
+        if (aCreated != null && bCreated != null) {
+          // ✅ Ascending order (first added first)
+          return aCreated.compareTo(bCreated);
+        }
+        // Fallback to document ID comparison
+        return a.id.compareTo(b.id);
+      } catch (e) {
+        return a.id.compareTo(b.id);
+      }
+    });
+
+    _sortedSource = snapshot;
+    _sortedCache = docs;
+    return docs;
+  }
+
+  /// Update closing balance.
+  ///
+  /// Called from the transaction list builder, so it must be cheap and must
+  /// not write during the build phase: it skips no-op writes and defers the
+  /// real one to after the current frame.
+  void _updateClosingBalance(double newTotal) {
     if (_ledgerRef == null || _isLedgerClosed) return;
-    try {
-      await _ledgerRef!.update({'closingBalance': newTotal});
-    } catch (e) {
-      debugPrint("Error updating closing balance: $e");
-    }
+    if (_lastWrittenClosing == newTotal) return;
+    _lastWrittenClosing = newTotal;
+
+    final ref = _ledgerRef!;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.update({'closingBalance': newTotal});
+      } catch (e) {
+        debugPrint("Error updating closing balance: $e");
+        // Allow a retry on the next emission.
+        if (_lastWrittenClosing == newTotal) _lastWrittenClosing = null;
+      }
+    });
   }
 
   /// Get proper title for transaction
@@ -2246,33 +2320,15 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                                   );
                                 }
 
-                                final docs = snapshot.data?.docs ?? [];
-
-                                // ✅ Sort transactions in memory to get chronological order (first added = first shown)
-                                if (docs.isNotEmpty) {
-                                  docs.sort((a, b) {
-                                    try {
-                                      final aData = a.data();
-                                      final bData = b.data();
-                                      final aCreated =
-                                          aData['createdAt'] as Timestamp?;
-                                      final bCreated =
-                                          bData['createdAt'] as Timestamp?;
-
-                                      if (aCreated != null &&
-                                          bCreated != null) {
-                                        return aCreated.compareTo(
-                                          bCreated,
-                                        ); // ✅ Ascending order (first added first)
-                                      }
-
-                                      // Fallback to document ID comparison
-                                      return a.id.compareTo(b.id);
-                                    } catch (e) {
-                                      return a.id.compareTo(b.id);
-                                    }
-                                  });
-                                }
+                                // ✅ Sort transactions in memory to get
+                                // chronological order (first added = first
+                                // shown). Memoised on the snapshot so the sort
+                                // runs once per emission rather than on every
+                                // rebuild — and so we no longer mutate the
+                                // snapshot's own docs list in place.
+                                final docs = _sortedTransactions(
+                                  snapshot.data,
+                                );
 
                                 if (docs.isEmpty) {
                                   return Center(
@@ -2350,14 +2406,18 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                                   color: Colors.white,
                                   child: ListView.builder(
                                     itemCount: docs.length,
+                                    addAutomaticKeepAlives: false,
                                     itemBuilder: (context, index) {
                                       final doc = docs[index];
                                       final data = doc.data();
-                                      return _buildTransactionItem(
-                                        context,
-                                        data,
-                                        doc,
-                                        isLandscape,
+                                      return KeyedSubtree(
+                                        key: ValueKey(doc.id),
+                                        child: _buildTransactionItem(
+                                          context,
+                                          data,
+                                          doc,
+                                          isLandscape,
+                                        ),
                                       );
                                     },
                                   ),

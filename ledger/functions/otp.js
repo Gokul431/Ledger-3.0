@@ -109,20 +109,19 @@ exports.sendOTP = functions.https.onCall(async (data, context) => {
     }
 
     // 2. Check rate limiting (prevent spam)
+    // Single-field query avoids requiring a composite Firestore index.
     const otpCollection = db.collection('otp_requests');
     const recentOTPs = await otpCollection
       .where('phoneNumber', '==', normalizedPhone)
-      .where('createdAt', '>', admin.firestore.Timestamp.fromDate(
-        new Date(Date.now() - RATE_LIMIT_MINUTES * 60 * 1000)
-      ))
-      .orderBy('createdAt', 'desc')
-      .limit(1)
+      .limit(5)
       .get();
 
-    if (!recentOTPs.empty) {
-      const lastOTP = recentOTPs.docs[0].data();
-      const timeDiff = Date.now() - lastOTP.createdAt.toMillis();
-      if (timeDiff < RATE_LIMIT_MINUTES * 60 * 1000) {
+    const rateLimitCutoff = Date.now() - RATE_LIMIT_MINUTES * 60 * 1000;
+    for (const doc of recentOTPs.docs) {
+      const lastOTP = doc.data();
+      if (!lastOTP.createdAt) continue;
+      const createdAtMs = lastOTP.createdAt.toMillis();
+      if (createdAtMs > rateLimitCutoff) {
         throw new functions.https.HttpsError(
           'resource-exhausted',
           `Please wait ${RATE_LIMIT_MINUTES} minute(s) before requesting another OTP.`
@@ -190,8 +189,160 @@ exports.sendOTP = functions.https.onCall(async (data, context) => {
 });
 
 /**
+ * Send OTP to an admin's email address (second factor for the
+ * Username + Password admin login path).
+ *
+ * @param {string} email - Email address to send the OTP to
+ * @returns {Promise<{success: boolean, message: string, otpId?: string}>}
+ */
+exports.sendEmailOTP = functions
+  .runWith({ secrets: ['RESEND_API_KEY'] })
+  .https.onCall(async (data, context) => {
+    try {
+      const { email } = data;
+
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'A valid email address is required'
+        );
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+
+      console.log('📧 Sending email OTP to:', normalizedEmail);
+
+      // 1. Verify email exists in adminlogin collection
+      const adminSnapshot = await db.collection('adminlogin').get();
+      let adminData = null;
+      let adminDocId = null;
+
+      for (const doc of adminSnapshot.docs) {
+        const docData = doc.data();
+        const docEmail = (docData.email || '').toString().trim().toLowerCase();
+        if (docEmail && docEmail === normalizedEmail) {
+          adminData = docData;
+          adminDocId = doc.id;
+          break;
+        }
+      }
+
+      if (!adminData) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          'Email not registered to any admin account.'
+        );
+      }
+
+      // 2. Rate limiting (prevent spam)
+      const otpCollection = db.collection('otp_requests');
+      const recentOTPs = await otpCollection
+        .where('email', '==', normalizedEmail)
+        .limit(5)
+        .get();
+
+      const rateLimitCutoff = Date.now() - RATE_LIMIT_MINUTES * 60 * 1000;
+      for (const doc of recentOTPs.docs) {
+        const lastOTP = doc.data();
+        if (!lastOTP.createdAt) continue;
+        if (lastOTP.createdAt.toMillis() > rateLimitCutoff) {
+          throw new functions.https.HttpsError(
+            'resource-exhausted',
+            `Please wait ${RATE_LIMIT_MINUTES} minute(s) before requesting another OTP.`
+          );
+        }
+      }
+
+      // 3. Generate OTP
+      const otp = generateOTP();
+      const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+      // 4. Store OTP in Firestore
+      const otpDoc = await otpCollection.add({
+        email: normalizedEmail,
+        otp: otp,
+        adminDocId: adminDocId,
+        attempts: 0,
+        verified: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+      });
+
+      console.log('✅ Email OTP generated and stored:', otpDoc.id);
+
+      // 5. Send OTP via Resend
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (!resendApiKey) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Email OTP is not configured on the server (missing RESEND_API_KEY).'
+        );
+      }
+
+      const emailResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Ledger App <onboarding@resend.dev>',
+          to: [normalizedEmail],
+          subject: `Your Ledger App verification code: ${otp}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+              <h2 style="color: #455A64;">Ledger App Login Verification</h2>
+              <p>Your one-time verification code is:</p>
+              <p style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #455A64;">${otp}</p>
+              <p>This code expires in ${OTP_EXPIRY_MINUTES} minutes. If you didn't request this, you can ignore this email.</p>
+            </div>
+          `,
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorBody = await emailResponse.text();
+        console.error('❌ Resend API error:', emailResponse.status, errorBody);
+        let userMessage = 'Failed to send verification email. Please try again.';
+        try {
+          const parsed = JSON.parse(errorBody);
+          if (parsed.message) {
+            userMessage = parsed.message;
+          }
+        } catch (_) {
+          // keep default message
+        }
+        throw new functions.https.HttpsError('internal', userMessage);
+      }
+
+      console.log(`📤 Email OTP sent to ${normalizedEmail}`);
+
+      // Clean up expired OTPs (background cleanup)
+      cleanupExpiredOTPs();
+
+      return {
+        success: true,
+        message: `OTP sent to ${normalizedEmail}`,
+        otpId: otpDoc.id,
+        expiresIn: OTP_EXPIRY_MINUTES * 60, // seconds
+      };
+    } catch (error) {
+      console.error('❌ Error sending email OTP:', error);
+
+      if (error instanceof functions.https.HttpsError) {
+        throw error;
+      }
+
+      throw new functions.https.HttpsError(
+        'internal',
+        'Failed to send OTP email. Please try again later.'
+      );
+    }
+  });
+
+/**
  * Verify OTP
- * 
+ *
  * This function:
  * 1. Validates OTP ID and code
  * 2. Checks if OTP exists and is not expired

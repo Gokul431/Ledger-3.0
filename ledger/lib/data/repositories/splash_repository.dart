@@ -11,7 +11,8 @@ class SplashRepository {
   /// cached session lookups, or remote config fetches.
   Future<void> preloadApp() async {
     // TODO: Replace with actual Firebase/database calls.
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    // No artificial delay here — the splash's own animation window already
+    // governs how long the screen is shown.
   }
 }
 

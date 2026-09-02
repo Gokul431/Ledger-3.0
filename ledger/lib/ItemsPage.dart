@@ -19,10 +19,32 @@ class _ItemsPageState extends State<ItemsPage> {
 
   static const _primary = Color(0xFF455A64);
 
+  /// Cached items stream — building `.snapshots()` inline in `build()` made
+  /// every rebuild drop and re-create the Firestore listener, flashing the
+  /// spinner and re-rendering the list.
+  Stream<QuerySnapshot>? _itemsStream;
+  String? _itemsStreamKey;
+
   @override
   void initState() {
     super.initState();
     _loadShops();
+  }
+
+  Stream<QuerySnapshot> _itemsStreamFor(String? shopCollection) {
+    if (shopCollection == null || shopCollection.isEmpty) {
+      return const Stream.empty();
+    }
+    if (_itemsStreamKey != shopCollection || _itemsStream == null) {
+      _itemsStreamKey = shopCollection;
+      _itemsStream = FirebaseFirestore.instance
+          .collection(shopCollection)
+          .doc('items')
+          .collection('list')
+          .orderBy('createdAt', descending: false)
+          .snapshots();
+    }
+    return _itemsStream!;
   }
 
   Future<void> _loadShops() async {
@@ -171,12 +193,7 @@ class _ItemsPageState extends State<ItemsPage> {
                       ? _emptyState(Icons.store_outlined, 'No shops found',
                           'Add shops first from the admin panel')
                       : StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection(_selectedShopCollection!)
-                              .doc('items')
-                              .collection('list')
-                              .orderBy('createdAt', descending: false)
-                              .snapshots(),
+                          stream: _itemsStreamFor(_selectedShopCollection),
                           builder: (context, snapshot) {
                             if (snapshot.hasError) {
                               return Center(

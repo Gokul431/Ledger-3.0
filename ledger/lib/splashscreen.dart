@@ -77,23 +77,18 @@ class _SplashScreenState extends State<SplashScreen>
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // Animated Background Gradient
-          AnimatedBuilder(
-            animation: _animationController,
-            builder: (context, child) {
-              return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFF455A64).withOpacity(0.05),
-                      const Color(0xFFB0BEC5).withOpacity(0.03),
-                    ],
-                  ),
-                ),
-              );
-            },
+          // Background gradient. This was wrapped in an AnimatedBuilder that
+          // rebuilt it on every frame of the 2s intro even though it never
+          // reads the animation value — it is a static decoration.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0x0D455A64), Color(0x08B0BEC5)],
+              ),
+            ),
+            child: SizedBox.expand(),
           ),
 
           // Floating circles background

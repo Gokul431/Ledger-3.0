@@ -1,4 +1,6 @@
 ﻿import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,10 +23,34 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
   String _selectedFilter = 'All'; // All, Open, Closed
   String _sortOrder = 'Newest'; // Newest, Oldest
 
+  /// Cached ledgers stream — rebuilt only when the shop or sort order changes,
+  /// instead of on every `build()` (which resubscribed the Firestore listener
+  /// on every keystroke in the search box).
+  Stream<QuerySnapshot>? _ledgersStream;
+  String? _ledgersStreamKey;
+
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
     _initializeShops();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// Debounced so filtering runs once the user pauses typing rather than on
+  /// every character.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || _searchQuery == value) return;
+      setState(() => _searchQuery = value);
+    });
   }
 
   Future<void> _initializeShops() async {
@@ -54,18 +80,28 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
     }
   }
 
-  /// Get all ledgers stream for selected shop
+  /// Get all ledgers stream for selected shop.
+  ///
+  /// Cached against shop + sort order so unrelated rebuilds reuse the live
+  /// listener rather than resubscribing.
   Stream<QuerySnapshot> _getLedgersStream() {
     if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
-      return Stream.empty();
+      return const Stream.empty();
     }
 
-    return _firestore
+    final key = '$_selectedShopCollection|$_sortOrder';
+    if (_ledgersStreamKey == key && _ledgersStream != null) {
+      return _ledgersStream!;
+    }
+    _ledgersStreamKey = key;
+
+    _ledgersStream = _firestore
         .collection(_selectedShopCollection!)
         .doc('ledgers')
         .collection('dates')
         .orderBy('createdAt', descending: _sortOrder == 'Newest')
         .snapshots();
+    return _ledgersStream!;
   }
 
   /// Filter and sort ledgers
@@ -367,7 +403,7 @@ class _ManageLedgersPageState extends State<ManageLedgersPage> {
               ),
             ),
             onChanged: (value) {
-              setState(() => _searchQuery = value);
+              _onSearchChanged(value);
             },
           ),
           const SizedBox(height: 12),

@@ -8,7 +8,11 @@ import '../../data/repositories/splash_repository.dart';
 class SplashViewModel extends ChangeNotifier {
   SplashViewModel({
     required SplashRepository repository,
-    Duration navigationDelay = const Duration(seconds: 3),
+    // The splash exists to cover startup work, not to be a timed screen. The
+    // previous 3s (plus the repository's own delay) was dead time the user
+    // read as the app being slow to open; this is just long enough for the
+    // intro animation to land.
+    Duration navigationDelay = const Duration(milliseconds: 900),
   })  : _repository = repository,
         _navigationDelay = navigationDelay;
 
@@ -20,8 +24,12 @@ class SplashViewModel extends ChangeNotifier {
 
   Future<void> initialize() async {
     _hideSystemUI();
-    await _repository.preloadApp();
-    await Future<void>.delayed(_navigationDelay);
+    // Run the preload alongside the animation window instead of after it, so
+    // the splash lasts as long as the slower of the two rather than their sum.
+    await Future.wait(<Future<void>>[
+      _repository.preloadApp(),
+      Future<void>.delayed(_navigationDelay),
+    ]);
     _showSystemUI();
     _shouldNavigate = true;
     notifyListeners();

@@ -34,10 +34,56 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   String? _selectedShopCollection;
   late Future<void> _initFuture;
 
+  /// Cached customer-document future. `build()` used to call
+  /// `_getCustomerData()` inline in two FutureBuilders, so every rebuild
+  /// (including toggling the download spinner) refetched the document twice
+  /// and flashed the shimmer.
+  Future<Map<String, dynamic>>? _customerDataFuture;
+
+  /// Cached transactions stream shared by the list and the download FAB, which
+  /// previously each built their own `.snapshots()` inline in `build()`.
+  Stream<QuerySnapshot>? _transactionsStream;
+  String? _transactionsStreamKey;
+
   @override
   void initState() {
     super.initState();
     _initFuture = _initializeShop();
+  }
+
+  /// Customer document, fetched once and reused until explicitly refreshed.
+  ///
+  /// The AppBar's call-button FutureBuilder builds before `_initializeShop()`
+  /// resolves, so skip caching until the shop is known — otherwise an empty
+  /// placeholder result would be memoised for the life of the screen.
+  Future<Map<String, dynamic>> _customerData() {
+    if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
+      return Future.value(const <String, dynamic>{});
+    }
+    return _customerDataFuture ??= _getCustomerData();
+  }
+
+  /// Cached transactions stream for this customer, rebuilt only when the shop
+  /// changes. `snapshots()` is backed by a broadcast controller, so the list
+  /// and the FAB can share one instance and one underlying listener.
+  Stream<QuerySnapshot> _customerTransactionsStream() {
+    final shop = _selectedShopCollection;
+    if (shop == null || shop.isEmpty) return const Stream.empty();
+
+    final key = '$shop|${widget.customerId}';
+    if (_transactionsStreamKey == key && _transactionsStream != null) {
+      return _transactionsStream!;
+    }
+    _transactionsStreamKey = key;
+    _transactionsStream = FirebaseFirestore.instance
+        .collection(shop)
+        .doc('customers')
+        .collection('list')
+        .doc(widget.customerId)
+        .collection('transactions')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+    return _transactionsStream!;
   }
 
   Future<void> _initializeShop() async {
@@ -1503,7 +1549,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         ),
         actions: [
           FutureBuilder<Map<String, dynamic>>(
-            future: _getCustomerData(),
+            future: _customerData(),
             builder: (context, snapshot) {
               final mobile = snapshot.data?['mobile'] ?? '';
 
@@ -1557,7 +1603,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           }
 
           return FutureBuilder<Map<String, dynamic>>(
-            future: _getCustomerData(),
+            future: _customerData(),
             builder: (context, customerSnapshot) {
               if (customerSnapshot.connectionState == ConnectionState.waiting) {
                 return _buildProfessionalShimmer(isLandscape);
@@ -1592,14 +1638,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
               final mobile = customerData['mobile'] as String;
 
               return StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection(_selectedShopCollection!)
-                    .doc('customers')
-                    .collection('list')
-                    .doc(widget.customerId)
-                    .collection('transactions')
-                    .orderBy('createdAt', descending: true)
-                    .snapshots(),
+                stream: _customerTransactionsStream(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return _buildProfessionalShimmer(isLandscape);
@@ -1707,18 +1746,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       ),
       // 🔹 Floating Action Button with Loading State
       floatingActionButton: StreamBuilder<QuerySnapshot>(
-        stream:
-            _selectedShopCollection != null &&
-                _selectedShopCollection!.isNotEmpty
-            ? FirebaseFirestore.instance
-                  .collection(_selectedShopCollection!)
-                  .doc('customers')
-                  .collection('list')
-                  .doc(widget.customerId)
-                  .collection('transactions')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots()
-            : Stream.empty(),
+        stream: _customerTransactionsStream(),
         builder: (context, snapshot) {
           final docs = snapshot.data?.docs ?? [];
           return FloatingActionButton(

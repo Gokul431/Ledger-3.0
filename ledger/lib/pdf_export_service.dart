@@ -148,11 +148,17 @@ class PDFExportService {
     required List<Map<String, dynamic>> transactions,
     required bool isLedgerClosed,
   }) async {
-    // Verify Tamil fonts are loaded before generating PDF
+    // Fonts are loaded lazily after startup, so make sure that has finished
+    // before we build the document.
+    try {
+      await TamilFontLoader.ensureLoaded();
+    } catch (e) {
+      debugPrint('⚠️ WARNING: Tamil font load failed: $e');
+    }
     if (TamilFontLoader.tamilRegular == null) {
       debugPrint('⚠️ WARNING: Tamil fonts not initialized! PDF may not render Tamil correctly.');
     }
-    
+
     final pdf = pw.Document();
     final ledgerDate = DateFormat('dd-MMM-yyyy').format(date);
 

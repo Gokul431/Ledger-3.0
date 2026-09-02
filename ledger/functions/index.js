@@ -372,6 +372,7 @@ exports.generateLedgerPDF = functions.https.onCall(async (data, context) => {
 });
 
 const otpFunctions = require('./otp');
-exports.sendOTP    = otpFunctions.sendOTP;
-exports.verifyOTP  = otpFunctions.verifyOTP;
-exports.resendOTP  = otpFunctions.resendOTP;
+exports.sendOTP      = otpFunctions.sendOTP;
+exports.verifyOTP    = otpFunctions.verifyOTP;
+exports.resendOTP    = otpFunctions.resendOTP;
+exports.sendEmailOTP = otpFunctions.sendEmailOTP;

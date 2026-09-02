@@ -1,8 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:firebase_core/firebase_core.dart';
-import 'package:device_preview/device_preview.dart';
 import 'ledgerlist.dart';
 import 'splashscreen.dart';
 import 'firebase_options.dart';
@@ -21,28 +19,27 @@ Future<void> main() async {
     ),
   );
 
-  // Initialize Tamil fonts for PDF generation
-  try {
-    await TamilFontLoader.initializeFonts();
-  } catch (e) {
-    print('Warning: Failed to load Tamil fonts for PDF: $e');
-    // Continue app startup even if fonts fail to load
-  }
-
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
-    print('Firebase initialization error: $e');
+    debugPrint('Firebase initialization error: $e');
     // Optionally handle initialization failure (e.g., show error screen)
   }
-  runApp(
-    DevicePreview(
-      enabled: !kReleaseMode,
-      builder: (context) => const MyApp(),
-    ),
-  );
+
+  runApp(const MyApp());
+
+  // Tamil fonts are only needed when exporting a PDF, so parsing them is
+  // deferred until after the first frame instead of blocking startup. The PDF
+  // service awaits TamilFontLoader.ensureLoaded() before it builds a document,
+  // so an export that happens before this finishes still gets the fonts.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    TamilFontLoader.ensureLoaded().catchError((Object e) {
+      debugPrint('Warning: Failed to load Tamil fonts for PDF: $e');
+      // Continue running even if fonts fail to load.
+    });
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -53,8 +50,6 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Ledger App',
-      locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF455A64),

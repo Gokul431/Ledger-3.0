@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
@@ -29,6 +30,13 @@ class _LoginScreenState extends State<LoginScreen>
   int? _resendToken;
   String _phoneNumber = '';
 
+  // Email OTP state (second factor for Username + Password admin login)
+  String? _pendingEmailOtpId;
+  Map<String, dynamic>? _pendingClientDetails;
+  String? _pendingClientUsername;
+  bool _isSendingEmailOtp = false;
+  late TextEditingController _passwordLoginOtpController;
+
   late TextEditingController _employeeNameController;
   late TextEditingController _employeePasswordController;
   late TextEditingController _clientUsernameController;
@@ -41,6 +49,12 @@ class _LoginScreenState extends State<LoginScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
 
+  /// Cached shop list. The employee-login FutureBuilder called
+  /// `_getAllShops()` inline in `build()`, so every setState on this screen —
+  /// and this screen calls setState on nearly every interaction — refired the
+  /// `shop_list` query and reset the dropdown to its loading state.
+  Future<List<Map<String, dynamic>>>? _allShopsFuture;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +64,7 @@ class _LoginScreenState extends State<LoginScreen>
     _clientPasswordController = TextEditingController();
     _phoneNumberController = TextEditingController();
     _otpController = TextEditingController();
+    _passwordLoginOtpController = TextEditingController();
     _checkLoginStatus();
     _setupAnimations();
   }
@@ -153,6 +168,7 @@ class _LoginScreenState extends State<LoginScreen>
     _clientPasswordController.dispose();
     _phoneNumberController.dispose();
     _otpController.dispose();
+    _passwordLoginOtpController.dispose();
     super.dispose();
   }
 
@@ -661,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen>
       final clientDetails = await _getClientDetails(username);
 
       // Get email from adminlogin for Firebase Auth
-      final email = clientDetails?['email'] as String?;
+      String? email = clientDetails?['email'] as String?;
 
       // Sign in to Firebase Auth if email exists
       if (email != null && email.isNotEmpty) {
@@ -699,6 +715,7 @@ class _LoginScreenState extends State<LoginScreen>
               'email': emailToCreate,
               'authUid': userCredential.user?.uid,
             });
+            email = emailToCreate;
           } catch (e) {
             // User might already exist, try to sign in
             try {
@@ -714,30 +731,35 @@ class _LoginScreenState extends State<LoginScreen>
         }
       }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      // ── Email OTP second factor ──
+      // Only send an OTP if this admin has a real, deliverable email on
+      // file (not the synthetic `username@admin.ledger.local` created for
+      // backward-compatible Firebase Auth accounts).
+      final isRealEmail =
+          email != null && email.isNotEmpty && !email.endsWith('.ledger.local');
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('isLoggedIn', true);
-      await prefs.setString('loginType', 'client');
-      await prefs.setString('userName', clientDetails?['username'] ?? username);
-      await prefs.setString('clientId', clientDetails?['id'] ?? username);
-
-      if (mounted) {
-        _showSuccessSnackBar('Welcome, $username!');
-
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LedgerListScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-            transitionDuration: const Duration(milliseconds: 400),
-          ),
+      if (!isRealEmail) {
+        _showErrorSnackBar(
+          'Email verification isn\'t set up for this account yet. '
+          'Please add a real email to the admin account in Firestore.',
         );
+        if (mounted) setState(() => _isLoading = false);
+        return;
       }
+
+      final otpId = await _sendEmailOtp(email);
+      if (otpId == null) {
+        // _sendEmailOtp already showed an error snackbar
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      setState(() {
+        _pendingEmailOtpId = otpId;
+        _pendingClientDetails = clientDetails;
+        _pendingClientUsername = username;
+      });
+      _showSuccessSnackBar('Verification code sent to $email');
     } catch (e) {
       debugPrint('Error: $e');
       _showErrorSnackBar('Error: $e');
@@ -745,6 +767,111 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (mounted) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Calls the sendEmailOTP Cloud Function. Returns the OTP request id on
+  /// success, or null (after showing an error) on failure.
+  Future<String?> _sendEmailOtp(String email) async {
+    setState(() => _isSendingEmailOtp = true);
+    try {
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('sendEmailOTP')
+          .call({'email': email.trim()});
+      final data = Map<String, dynamic>.from(result.data as Map);
+      return data['otpId'] as String?;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('sendEmailOTP failed: ${e.code} ${e.message}');
+      _showErrorSnackBar(e.message ?? 'Failed to send verification email');
+      return null;
+    } catch (e) {
+      debugPrint('sendEmailOTP error: $e');
+      _showErrorSnackBar('Failed to send verification email: $e');
+      return null;
+    } finally {
+      if (mounted) setState(() => _isSendingEmailOtp = false);
+    }
+  }
+
+  Future<void> _resendEmailOtp() async {
+    final email = _pendingClientDetails?['email'] as String?;
+    if (email == null) return;
+    final otpId = await _sendEmailOtp(email);
+    if (otpId != null) {
+      setState(() {
+        _pendingEmailOtpId = otpId;
+        _passwordLoginOtpController.clear();
+      });
+      _showSuccessSnackBar('Verification code resent to $email');
+    }
+  }
+
+  void _cancelEmailOtpVerification() {
+    setState(() {
+      _pendingEmailOtpId = null;
+      _pendingClientDetails = null;
+      _pendingClientUsername = null;
+      _passwordLoginOtpController.clear();
+    });
+  }
+
+  Future<void> _verifyEmailOtpAndCompleteLogin() async {
+    final code = _passwordLoginOtpController.text.trim();
+    if (code.length != 6) {
+      _showErrorSnackBar('Please enter the 6-digit code');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseFunctions.instance.httpsCallable('verifyOTP').call({
+        'otpId': _pendingEmailOtpId,
+        'otpCode': code,
+      });
+
+      final username = _pendingClientUsername!;
+      final clientDetails = _pendingClientDetails;
+      _pendingEmailOtpId = null;
+      _pendingClientDetails = null;
+      _pendingClientUsername = null;
+      _passwordLoginOtpController.clear();
+
+      await _completeClientLogin(username, clientDetails);
+    } on FirebaseFunctionsException catch (e) {
+      _showErrorSnackBar(e.message ?? 'Invalid verification code');
+    } catch (e) {
+      _showErrorSnackBar('Error verifying code: $e');
+    }
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _completeClientLogin(
+    String username,
+    Map<String, dynamic>? clientDetails,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLoggedIn', true);
+    await prefs.setString('loginType', 'client');
+    await prefs.setString('userName', clientDetails?['username'] ?? username);
+    await prefs.setString('clientId', clientDetails?['id'] ?? username);
+
+    if (mounted) {
+      _showSuccessSnackBar('Welcome, $username!');
+
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const LedgerListScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
+      );
     }
   }
 
@@ -1545,6 +1672,10 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildClientPasswordLoginView() {
+    if (_pendingEmailOtpId != null) {
+      return _buildEmailOtpVerificationView();
+    }
+
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1768,6 +1899,156 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  Widget _buildEmailOtpVerificationView() {
+    final email = _pendingClientDetails?['email'] as String? ?? '';
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: _isLoading ? null : _cancelEmailOtpVerification,
+            child: Row(
+              children: [
+                Icon(Icons.arrow_back_ios, size: 18, color: Colors.grey[700]),
+                const SizedBox(width: 8),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text(
+            'Verify Your Email',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1F2937),
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Enter the 6-digit code sent to $email',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const SizedBox(height: 32),
+          const Text(
+            'Verification Code',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1F2937),
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.grey[300]!, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _passwordLoginOtpController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                hintText: 'Enter 6-digit code',
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                hintStyle: TextStyle(
+                  color: Colors.grey[500],
+                  fontWeight: FontWeight.w400,
+                ),
+                counterText: '',
+              ),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                letterSpacing: 4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _verifyEmailOtpAndCompleteLogin,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF455A64),
+                foregroundColor: Colors.white,
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                disabledBackgroundColor: Colors.grey[400],
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Verify & Sign In',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton(
+              onPressed: (_isLoading || _isSendingEmailOtp)
+                  ? null
+                  : _resendEmailOtp,
+              child: Text(
+                _isSendingEmailOtp ? 'Sending...' : 'Resend Code',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+
   void _showEmployeeLoginSheet() {
     _selectedShopId = null;
     _employeeNameController.clear();
@@ -1784,7 +2065,7 @@ class _LoginScreenState extends State<LoginScreen>
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) {
           return FutureBuilder<List<Map<String, dynamic>>>(
-            future: _getAllShops(),
+            future: _allShopsFuture ??= _getAllShops(),
             builder: (context, snapshot) {
               final shops = snapshot.data ?? [];
               final isLoading =

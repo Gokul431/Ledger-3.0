@@ -230,17 +230,23 @@ class _StockTabState extends State<StockTab> {
         return d.isBefore(endOfDay);
       }).toList();
 
-      // Step 3: fetch all existing entries using user-defined itemId as key
-      final entryDocs = await Future.wait(
-        _items.map((d) => _stockItemsCol().doc(_itemStockKey(d)).get()),
-      );
+      // Step 3: fetch all existing entries for the day in ONE query and index
+      // them by the user-defined itemId. This used to issue a separate `get()`
+      // per item, so opening the Stock tab cost one Firestore round-trip per
+      // item in the shop — the main reason this tab was slow to appear.
+      final entrySnap = await _stockItemsCol().get();
+      final existingEntries = <String, Map<String, dynamic>>{
+        for (final doc in entrySnap.docs)
+          doc.id: doc.data() as Map<String, dynamic>,
+      };
 
       // Step 4: for missing entries, resolve opening stocks in parallel then write
       final missingItems = <int>[];
       for (int i = 0; i < _items.length; i++) {
-        if (entryDocs[i].exists) {
-          _stockEntries[_itemStockKey(_items[i])] =
-              entryDocs[i].data() as Map<String, dynamic>;
+        final key = _itemStockKey(_items[i]);
+        final existing = existingEntries[key];
+        if (existing != null) {
+          _stockEntries[key] = existing;
         } else {
           missingItems.add(i);
         }

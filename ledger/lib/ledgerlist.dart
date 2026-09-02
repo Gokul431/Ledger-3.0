@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -32,6 +34,15 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
   String? _selectedShopName;
   bool _isLoadingShops = true;
 
+  /// Cached ledgers stream. Building `.snapshots()` inline in `build()` meant
+  /// every setState — including one per keystroke in the search box — tore
+  /// down the Firestore listener and started a new one, flashing the shimmer
+  /// and re-rendering the whole list.
+  Stream<QuerySnapshot>? _ledgersStream;
+  String? _ledgersStreamKey;
+
+  Timer? _searchDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -40,8 +51,19 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// Debounced search so filtering runs once the user pauses rather than on
+  /// every character.
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || _searchQuery == value) return;
+      setState(() => _searchQuery = value);
+    });
   }
 
   /// Initialize user role and fetch shops
@@ -66,14 +88,25 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         final savedSelectedShop = prefs.getString('selectedShopCollection');
         final savedSelectedShopName = prefs.getString('selectedShopName');
 
-        if (savedSelectedShop != null && savedSelectedShop.isNotEmpty) {
-          // Use the saved selected shop instead of resetting to first
+        // Only restore the saved shop if it still exists in the current
+        // shop_list — otherwise the dropdown's value won't match any of
+        // its items (e.g. after switching Firebase projects, or the shop
+        // was renamed/removed) and Flutter throws an assertion error.
+        final savedShopStillExists =
+            savedSelectedShop != null &&
+            _shops.any((s) => s['collectionName'] == savedSelectedShop);
+
+        if (savedShopStillExists) {
           setState(() {
             _selectedShopCollection = savedSelectedShop;
             _selectedShopName = savedSelectedShopName;
           });
           debugPrint(
             'Restored saved shop: $_selectedShopCollection - $_selectedShopName',
+          );
+        } else if (savedSelectedShop != null && savedSelectedShop.isNotEmpty) {
+          debugPrint(
+            'Saved shop "$savedSelectedShop" no longer exists — keeping default selection',
           );
         }
       } else if (loginType == 'employee') {
@@ -96,11 +129,20 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       final snapshot = await _firestore.collection('shop_list').get();
 
       List<Map<String, dynamic>> shopsList = [];
+      final seenCollectionNames = <String>{};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final collectionName = data['collectionName'] ?? '';
+        // Guard against duplicate shop_list entries sharing a
+        // collectionName — the dropdown below requires each value to
+        // appear in exactly one item, or it crashes.
+        if (collectionName.isEmpty ||
+            !seenCollectionNames.add(collectionName)) {
+          continue;
+        }
         shopsList.add({
-          'collectionName': data['collectionName'] ?? '',
+          'collectionName': collectionName,
           'shopName': data['shopName'] ?? 'Unknown Shop',
         });
       }
@@ -450,11 +492,26 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
     setState(() {});
   }
 
-  /// Get ledger stream for selected shop
+  /// Get ledger stream for selected shop.
+  ///
+  /// The stream instance is cached and only rebuilt when the shop or the user
+  /// role actually changes, so unrelated rebuilds reuse the live listener
+  /// instead of resubscribing.
   Stream<QuerySnapshot> _getLedgersStream() {
     if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
-      return Stream.empty();
+      return const Stream.empty();
     }
+
+    final key = '$_selectedShopCollection|$_userRole';
+    if (_ledgersStreamKey == key && _ledgersStream != null) {
+      return _ledgersStream!;
+    }
+    _ledgersStreamKey = key;
+
+    final dates = _firestore
+        .collection(_selectedShopCollection!)
+        .doc('ledgers')
+        .collection('dates');
 
     // For employees: Show only last 2 days
     // For admin (client): Show all dates
@@ -462,39 +519,38 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       final twoDaysAgo = DateTime.now().subtract(const Duration(days: 2));
       final twoDaysAgoTimestamp = Timestamp.fromDate(twoDaysAgo);
 
-      return _firestore
-          .collection(_selectedShopCollection!)
-          .doc('ledgers')
-          .collection('dates')
+      _ledgersStream = dates
           .where('createdAt', isGreaterThanOrEqualTo: twoDaysAgoTimestamp)
           .orderBy('createdAt', descending: true)
           .snapshots();
+    } else {
+      // Admin: Show all dates
+      _ledgersStream = dates
+          .orderBy('createdAt', descending: true)
+          .snapshots();
     }
-
-    // Admin: Show all dates
-    return _firestore
-        .collection(_selectedShopCollection!)
-        .doc('ledgers')
-        .collection('dates')
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    return _ledgersStream!;
   }
 
   /// Filter ledgers based on search query and date filter
   List<QueryDocumentSnapshot> _filterLedgers(List<QueryDocumentSnapshot> docs) {
+    // Hoisted out of the per-document loop — these were recomputed for every
+    // row on every pass.
+    final query = _searchQuery.toLowerCase();
+    final dateFormat = DateFormat('dd-MMM-yyyy');
+    final now = DateTime.now();
+
     return docs.where((doc) {
       final ledger = doc.data() as Map<String, dynamic>;
       final ledgerDate = ledger['ledgerDate'] ?? '';
       // Apply search filter
       bool matchesSearch =
-          _searchQuery.isEmpty ||
-          ledgerDate.toLowerCase().contains(_searchQuery.toLowerCase());
+          query.isEmpty || ledgerDate.toLowerCase().contains(query);
       if (!matchesSearch) return false;
       // Apply date filter
       if (_selectedFilter == 'All') return true;
       try {
-        final date = DateFormat('dd-MMM-yyyy').parse(ledgerDate);
-        final now = DateTime.now();
+        final date = dateFormat.parse(ledgerDate);
         final today = DateTime(now.year, now.month, now.day);
         switch (_selectedFilter) {
           case 'This Week':
@@ -888,11 +944,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                     horizontal: 16,
                   ),
                 ),
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value;
-                  });
-                },
+                onChanged: _onSearchChanged,
               ),
             )
           : const SizedBox.shrink(),
@@ -1688,14 +1740,18 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                               color: Colors.white,
                               child: ListView.builder(
                                 itemCount: filteredDocs.length,
+                                addAutomaticKeepAlives: false,
                                 itemBuilder: (context, index) {
+                                  final doc = filteredDocs[index];
                                   final ledger =
-                                      filteredDocs[index].data()
-                                          as Map<String, dynamic>;
-                                  return _buildLedgerItem(
-                                    context,
-                                    ledger,
-                                    isLandscape,
+                                      doc.data() as Map<String, dynamic>;
+                                  return KeyedSubtree(
+                                    key: ValueKey(doc.id),
+                                    child: _buildLedgerItem(
+                                      context,
+                                      ledger,
+                                      isLandscape,
+                                    ),
                                   );
                                 },
                               ),
