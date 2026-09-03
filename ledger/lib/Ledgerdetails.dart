@@ -581,11 +581,6 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         data['billPhotoUrl'] != null &&
         data['billPhotoUrl'].toString().isNotEmpty;
 
-    // Debug: Verify the logic
-    debugPrint(
-      'Transaction: $title, isCredit: $isCredit, Color: ${isCredit ? "RED" : "GREEN"}, Subtitle: $subtitle',
-    );
-
     return GestureDetector(
       // Allow long press for both admin and employee
       // Admin: Full options (View Bill, Edit, Delete)

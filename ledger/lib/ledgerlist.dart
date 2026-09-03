@@ -1368,11 +1368,6 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         ? Colors.red[600]
         : (isToday ? const Color(0xFF455A64) : Colors.green[600]);
 
-    // Debug: Print values being passed
-    debugPrint(
-      'Passing shop: $_selectedShopCollection, name: $_selectedShopName',
-    );
-
     return Column(
       children: [
         InkWell(
