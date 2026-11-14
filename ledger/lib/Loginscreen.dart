@@ -389,10 +389,16 @@ class _LoginScreenState extends State<LoginScreen>
       final snapshot = await FirebaseFirestore.instance
           .collection('adminlogin')
           .where('username', isEqualTo: username)
-          .where('password', isEqualTo: password)
           .get();
 
-      return snapshot.docs.isNotEmpty;
+      // Passwords may be stored as a SHA-256 hash (set via
+      // ChangeCredentialsPage) or as legacy plain text.
+      final hashedInput = _hashPassword(password);
+      for (final doc in snapshot.docs) {
+        final stored = (doc.data()['password'] ?? '').toString().trim();
+        if (stored == hashedInput || stored == password) return true;
+      }
+      return false;
     } catch (e) {
       debugPrint('Error verifying client credentials: $e');
       return false;
