@@ -1191,117 +1191,126 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
                 ],
               ),
             ),
+      // Lift the action bar above the on-screen keyboard so Cancel / Close
+      // Ledger stay visible while typing. The Builder scopes the keyboard
+      // inset lookup so only this bar rebuilds as the keyboard animates.
       bottomNavigationBar: (_ledgerClosed && !_isEditMode)
           ? null
-          : SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
+          : Builder(
+              builder: (context) => Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextButton(
-                        onPressed: _isEditMode
-                            ? _cancelEdit
-                            : () => Navigator.pop(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        child: Text(
-                          _isEditMode ? 'Cancel Edit' : 'Cancel',
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 3,
-                      child: ElevatedButton(
-                        onPressed:
-                            (_isSaving || (_ledgerClosed && !_isEditMode))
-                            ? null
-                            : _isEditMode
-                            ? _showConfirmUpdateDialog
-                            : _showConfirmCloseDialog,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF455A64),
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey[400],
-                          disabledForegroundColor: Colors.white70,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: _isSaving
-                            ? const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Saving...',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    _isEditMode
-                                        ? Icons.save
-                                        : Icons.check_circle,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _isEditMode
-                                        ? 'Save Changes'
-                                        : 'Close Ledger',
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ],
+                child: _actionBar(),
+              ),
+            ),
+    );
+  }
+
+  Widget _actionBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: TextButton(
+                onPressed: _isEditMode
+                    ? _cancelEdit
+                    : () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text(
+                  _isEditMode ? 'Cancel Edit' : 'Cancel',
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 3,
+              child: ElevatedButton(
+                onPressed: (_isSaving || (_ledgerClosed && !_isEditMode))
+                    ? null
+                    : _isEditMode
+                    ? _showConfirmUpdateDialog
+                    : _showConfirmCloseDialog,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF455A64),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey[400],
+                  disabledForegroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isSaving
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Saving...',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _isEditMode ? Icons.save : Icons.check_circle,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isEditMode ? 'Save Changes' : 'Close Ledger',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

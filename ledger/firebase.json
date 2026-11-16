@@ -8,12 +8,20 @@
           "fileOutput": "android/app/google-services.json"
         }
       },
+      "ios": {
+        "default": {
+          "projectId": "ledger-prod-decf8",
+          "appId": "1:591294652866:ios:1f04a0d8b5ec9e2e23365b",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
       "dart": {
         "lib/firebase_options.dart": {
           "projectId": "ledger-prod-decf8",
           "configurations": {
             "android": "1:591294652866:android:acdecd77e106c53023365b",
-            "ios": "1:582085220530:ios:c2f96a90aaf32ad94091ab"
+            "ios": "1:591294652866:ios:1f04a0d8b5ec9e2e23365b"
           }
         }
       }

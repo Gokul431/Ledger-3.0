@@ -57,5 +57,17 @@
 	<string>This app needs access to save bill photos to your photo library.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Firebase Phone Auth reCAPTCHA fallback (Encoded App ID) -->
+				<string>app-1-591294652866-ios-1f04a0d8b5ec9e2e23365b</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

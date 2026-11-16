@@ -1773,19 +1773,35 @@ class _StockTabState extends State<StockTab> {
                                                   color: Colors.green.shade700,
                                                 ),
                                                 const SizedBox(width: 8),
-                                                Text(
-                                                  'N.S ${i + 1}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
-                                                    color:
-                                                        Colors.green.shade700,
+                                                // Fixed min width so bag text
+                                                // lines up across rows even
+                                                // when "Load 9" → "Load 10".
+                                                ConstrainedBox(
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                        minWidth: 52,
+                                                      ),
+                                                  child: Text(
+                                                    'Load ${i + 1}',
+                                                    maxLines: 1,
+                                                    softWrap: false,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          Colors.green.shade700,
+                                                    ),
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
+                                                // Wrap onto a second line for
+                                                // many bag sizes instead of
+                                                // hiding them behind "…".
                                                 Expanded(
                                                   child: Text(
                                                     loadBagStr(e),
+                                                    maxLines: 2,
                                                     style: TextStyle(
                                                       fontSize: 13,
                                                       fontWeight:

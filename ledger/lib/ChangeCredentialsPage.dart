@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 
@@ -25,7 +26,13 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
   bool _isVerified = false;
 
   final String _adminDocId = 'gVqhngvSiXV7fHIUVL2u';
-  String? _currentHashedPassword;
+
+  /// Verified current password (trimmed, plain) — needed to re-authenticate
+  /// with Firebase Auth before changing the Auth password.
+  String? _verifiedCurrentPassword;
+
+  /// Email of the admin's Firebase Auth account (from the adminlogin doc).
+  String? _adminEmail;
 
   @override
   void dispose() {
@@ -63,22 +70,19 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
       }
 
       final data = docSnapshot.data()!;
-      final storedPassword = data['password'] as String;
+      final storedPassword = (data['password'] ?? '').toString().trim();
+      // Trim to match the login screen, which trims what the user types.
+      final input = _currentPasswordController.text.trim();
 
-      // Check if password is already hashed (64 characters for SHA-256)
-      String hashedInput;
-      if (storedPassword.length == 64) {
-        // Already hashed, compare with hashed input
-        hashedInput = _hashPassword(_currentPasswordController.text);
-      } else {
-        // Plain text password (for backward compatibility)
-        hashedInput = _currentPasswordController.text;
-      }
+      // Stored value may be a SHA-256 hash or legacy plain text.
+      final matches =
+          storedPassword == _hashPassword(input) || storedPassword == input;
 
-      if (hashedInput == storedPassword) {
+      if (matches) {
         setState(() {
           _isVerified = true;
-          _currentHashedPassword = storedPassword;
+          _verifiedCurrentPassword = input;
+          _adminEmail = (data['email'] ?? '').toString().trim();
           _usernameController.text = data['username'] ?? '';
         });
         _showSnackBar(
@@ -99,7 +103,12 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
   Future<void> _updateCredentials() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_newPasswordController.text != _confirmPasswordController.text) {
+    // Trim exactly like the login screen does, so what is saved here is
+    // what will match at login.
+    final newUsername = _usernameController.text.trim();
+    final newPassword = _newPasswordController.text.trim();
+
+    if (newPassword != _confirmPasswordController.text.trim()) {
       _showSnackBar('New passwords do not match', isError: true);
       return;
     }
@@ -107,28 +116,92 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
     setState(() => _isLoading = true);
 
     try {
-      final hashedPassword = _hashPassword(_newPasswordController.text);
-
-      await FirebaseFirestore.instance
+      // Make sure no other admin account already uses this username.
+      final clash = await FirebaseFirestore.instance
           .collection('adminlogin')
-          .doc(_adminDocId)
-          .update({
-            'username': _usernameController.text.trim(),
-            'password': hashedPassword,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+          .where('username', isEqualTo: newUsername)
+          .get();
+      if (clash.docs.any((d) => d.id != _adminDocId)) {
+        _showSnackBar('This username is already taken', isError: true);
+        return;
+      }
+
+      // 1. Keep the Firebase Authentication password in sync.
+      final authSynced = await _updateAuthPassword(newPassword);
+
+      // 2. Save the new username + hashed password in Firestore.
+      try {
+        await FirebaseFirestore.instance
+            .collection('adminlogin')
+            .doc(_adminDocId)
+            .update({
+              'username': newUsername,
+              'password': _hashPassword(newPassword),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+      } catch (e) {
+        // Roll the Auth password back so the two stay matched.
+        if (authSynced) await _rollbackAuthPassword(newPassword);
+        rethrow;
+      }
 
       if (mounted) {
         _showSnackBar('Credentials updated successfully!');
-
-        // Show success dialog
         _showSuccessDialog();
       }
     } catch (e) {
       debugPrint('Error updating credentials: $e');
       _showSnackBar('Failed to update credentials: $e', isError: true);
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Signs in / re-authenticates the admin's Firebase Auth account with the
+  /// verified current password, then sets the new password on it.
+  /// Returns true if the Auth password was changed.
+  Future<bool> _updateAuthPassword(String newPassword) async {
+    final email = _adminEmail;
+    final current = _verifiedCurrentPassword;
+    if (email == null || email.isEmpty || current == null) return false;
+
+    final auth = FirebaseAuth.instance;
+    try {
+      User? user = auth.currentUser;
+      if (user != null && user.email?.toLowerCase() == email.toLowerCase()) {
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: email, password: current),
+        );
+      } else {
+        user = (await auth.signInWithEmailAndPassword(
+          email: email,
+          password: current,
+        ))
+            .user;
+      }
+      await user?.updatePassword(newPassword);
+      debugPrint('✅ Firebase Auth password updated');
+      return user != null;
+    } on FirebaseAuthException catch (e) {
+      // Auth account was already out of sync (or missing). The login screen
+      // repairs this on next login, so don't block the Firestore update.
+      debugPrint('⚠️ Could not update Firebase Auth password: ${e.code}');
+      return false;
+    }
+  }
+
+  Future<void> _rollbackAuthPassword(String newPassword) async {
+    final email = _adminEmail;
+    final current = _verifiedCurrentPassword;
+    final user = FirebaseAuth.instance.currentUser;
+    if (email == null || current == null || user == null) return;
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: newPassword),
+      );
+      await user.updatePassword(current);
+    } catch (e) {
+      debugPrint('⚠️ Could not roll back Firebase Auth password: $e');
     }
   }
 
@@ -452,10 +525,10 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                     label: 'New Username',
                     icon: Icons.person_outline,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return 'Please enter a username';
                       }
-                      if (value.length < 4) {
+                      if (value.trim().length < 4) {
                         return 'Username must be at least 4 characters';
                       }
                       return null;
@@ -474,10 +547,10 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                       });
                     },
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return 'Please enter a new password';
                       }
-                      if (value.length < 6) {
+                      if (value.trim().length < 6) {
                         return 'Password must be at least 6 characters';
                       }
                       return null;
@@ -499,7 +572,7 @@ class _ChangeCredentialsPageState extends State<ChangeCredentialsPage> {
                       if (value == null || value.isEmpty) {
                         return 'Please confirm your password';
                       }
-                      if (value != _newPasswordController.text) {
+                      if (value.trim() != _newPasswordController.text.trim()) {
                         return 'Passwords do not match';
                       }
                       return null;

@@ -695,7 +695,19 @@ class _LoginScreenState extends State<LoginScreen>
           debugPrint('✅ Signed in to Firebase Auth as client');
         } catch (authError) {
           debugPrint('⚠️ Could not sign in to Firebase Auth: $authError');
-          // Continue anyway - Firestore credentials are valid
+          // Firestore credentials are valid. If the Auth account doesn't
+          // exist (e.g. it was deleted to reset it), recreate it with the
+          // current password so the two stay in sync. If it exists with a
+          // different password this fails harmlessly and we continue.
+          try {
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+            debugPrint('✅ Recreated Firebase Auth user for client');
+          } catch (createError) {
+            debugPrint('⚠️ Could not recreate Firebase Auth user: $createError');
+          }
         }
       } else {
         // Create email if it doesn't exist (for backward compatibility)
