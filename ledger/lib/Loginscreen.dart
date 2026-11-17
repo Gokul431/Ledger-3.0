@@ -598,8 +598,6 @@ class _LoginScreenState extends State<LoginScreen>
       final username = adminData['username'] ?? 'Admin';
       final clientId = adminData['id'] ?? userCredential.user?.uid ?? '';
 
-      await Future.delayed(const Duration(milliseconds: 500));
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);
       await prefs.setString('loginType', 'client');
@@ -963,8 +961,6 @@ class _LoginScreenState extends State<LoginScreen>
         _selectedShopId!,
         shopName,
       );
-
-      await Future.delayed(const Duration(milliseconds: 500));
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);

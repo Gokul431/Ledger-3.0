@@ -5,7 +5,11 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AddCustomer extends StatefulWidget {
-  const AddCustomer({super.key});
+  const AddCustomer({super.key, this.shopCollection});
+
+  /// Shop the admin is currently viewing. Pre-selected so a new customer is
+  /// added to that shop, not silently to the first shop in the list.
+  final String? shopCollection;
 
   @override
   State<AddCustomer> createState() => _AddCustomerState();
@@ -70,20 +74,36 @@ class _AddCustomerState extends State<AddCustomer> {
       final snapshot = await _firestore.collection('shop_list').get();
 
       List<Map<String, dynamic>> shopsList = [];
+      final seen = <String>{};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final collectionName = (data['collectionName'] ?? '').toString();
+        // Blank/duplicate entries would crash the shop dropdown.
+        if (collectionName.isEmpty || !seen.add(collectionName)) continue;
         shopsList.add({
-          'collectionName': data['collectionName'] ?? '',
+          'collectionName': collectionName,
           'shopName': data['shopName'] ?? 'Unknown Shop',
         });
       }
 
+      // Default to the shop being viewed (passed in, else the shop saved by
+      // the Ledger/Customer list), falling back to the first shop only if
+      // neither exists in the current shop_list.
+      final prefs = await SharedPreferences.getInstance();
+      final preferred =
+          widget.shopCollection ?? prefs.getString('selectedShopCollection');
+      final match = shopsList.firstWhere(
+        (s) => s['collectionName'] == preferred,
+        orElse: () => shopsList.isNotEmpty ? shopsList[0] : {},
+      );
+
+      if (!mounted) return;
       setState(() {
         _shops = shopsList;
-        if (shopsList.isNotEmpty) {
-          _selectedShopCollection = shopsList[0]['collectionName'];
-          _selectedShopName = shopsList[0]['shopName'];
+        if (match.isNotEmpty) {
+          _selectedShopCollection = match['collectionName'];
+          _selectedShopName = match['shopName'];
         }
         _isLoadingShops = false;
       });
@@ -549,7 +569,13 @@ class _AddCustomerState extends State<AddCustomer> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      // Lift the button bar above the on-screen keyboard so it is never hidden.
+      bottomNavigationBar: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SafeArea(
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -592,6 +618,8 @@ class _AddCustomerState extends State<AddCustomer> {
                       ),
                     ),
             ),
+          ),
+        ),
           ),
         ),
       ),

@@ -4,7 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CreateLedgerScreen extends StatefulWidget {
-  const CreateLedgerScreen({super.key});
+  const CreateLedgerScreen({super.key, this.shopCollection});
+
+  /// Shop selected on the Ledger list. Pre-selected for admins so the ledger
+  /// is created in the same shop the list checked — not whichever shop the
+  /// admin happens to pick here.
+  final String? shopCollection;
 
   @override
   State<CreateLedgerScreen> createState() => _CreateLedgerScreenState();
@@ -94,6 +99,11 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
 
       if (loginType == 'client') {
         await _fetchAllShops();
+        final passed = widget.shopCollection;
+        if (passed != null &&
+            _shops.any((s) => s['collectionName'] == passed)) {
+          await _onShopSelected(passed);
+        }
       } else if (loginType == 'employee') {
         await _loadPreviousLedgerData();
       }
@@ -112,11 +122,15 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
           .get();
 
       List<Map<String, dynamic>> shopsList = [];
+      final seen = <String>{};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final collectionName = (data['collectionName'] ?? '').toString();
+        // Blank/duplicate entries would crash the shop dropdown.
+        if (collectionName.isEmpty || !seen.add(collectionName)) continue;
         shopsList.add({
-          'collectionName': data['collectionName'] ?? '',
+          'collectionName': collectionName,
           'shopName': data['shopName'] ?? 'Unknown Shop',
         });
       }
@@ -897,7 +911,13 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      // Lift the button bar above the on-screen keyboard so it is never hidden.
+      bottomNavigationBar: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SafeArea(
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -963,6 +983,8 @@ class _CreateLedgerScreenState extends State<CreateLedgerScreen> {
                 ),
               ),
             ],
+          ),
+        ),
           ),
         ),
       ),

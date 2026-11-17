@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'Createledger.dart';
 import 'widgets/AppBottomBar.dart';
 import 'Ledgerdetails.dart';
+import 'Loginscreen.dart';
 
 class LedgerListScreen extends StatefulWidget {
   const LedgerListScreen({super.key});
@@ -85,9 +86,16 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         _userShopCollection = shopCollection;
       });
 
-      // For client, fetch all shops
+      // For client, fetch all shops. The phone's saved copy of shop_list is
+      // used first so the home page appears immediately; the server copy
+      // re-checks it in the background (and replaces a removed shop).
       if (loginType == 'client') {
-        await _fetchAllShops();
+        final fromCache = await _fetchAllShops(source: Source.cache);
+        if (fromCache) {
+          _refreshShopsFromServer();
+        } else {
+          await _fetchAllShops();
+        }
 
         // ✅ IMPORTANT: After fetching shops, check if there's a saved selected shop
         final savedSelectedShop = prefs.getString('selectedShopCollection');
@@ -102,17 +110,26 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
             _shops.any((s) => s['collectionName'] == savedSelectedShop);
 
         if (savedShopStillExists) {
+          final current = _shops.firstWhere(
+            (s) => s['collectionName'] == savedSelectedShop,
+          );
           setState(() {
             _selectedShopCollection = savedSelectedShop;
-            _selectedShopName = savedSelectedShopName;
+            // Name from Firestore (handles renames), not the saved copy.
+            _selectedShopName = current['shopName'] ?? savedSelectedShopName;
           });
           debugPrint(
             'Restored saved shop: $_selectedShopCollection - $_selectedShopName',
           );
-        } else if (savedSelectedShop != null && savedSelectedShop.isNotEmpty) {
-          debugPrint(
-            'Saved shop "$savedSelectedShop" no longer exists — keeping default selection',
+        } else if (_selectedShopCollection != null) {
+          // Saved shop is missing or stale (e.g. from the old Firebase
+          // project) — replace it with the shop now shown, so other pages
+          // like the Customer list don't keep using the stale one.
+          await prefs.setString(
+            'selectedShopCollection',
+            _selectedShopCollection!,
           );
+          await prefs.setString('selectedShopName', _selectedShopName ?? '');
         }
       } else if (loginType == 'employee') {
         // For employee, set their shop
@@ -121,6 +138,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
           _selectedShopName = shopName;
           _isLoadingShops = false;
         });
+        await _verifyEmployeeShopStillExists(shopCollection);
       }
     } catch (e) {
       debugPrint('Error initializing: $e');
@@ -128,10 +146,83 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
     }
   }
 
-  /// Fetch all shops for admin
-  Future<void> _fetchAllShops() async {
+  /// An employee's shop is saved on the phone at login and survives app
+  /// updates. If that shop no longer exists in the current shop_list (e.g. it
+  /// came from the old Firebase project, or was removed), the employee would
+  /// see an empty/wrong shop forever — so sign them out with a clear message.
+  /// Only acts on a confirmed server answer; offline does nothing.
+  Future<void> _verifyEmployeeShopStillExists(String? shopCollection) async {
     try {
-      final snapshot = await _firestore.collection('shop_list').get();
+      final exists = shopCollection != null &&
+          shopCollection.isNotEmpty &&
+          (await _firestore
+                  .collection('shop_list')
+                  .where('collectionName', isEqualTo: shopCollection)
+                  .limit(1)
+                  .get(const GetOptions(source: Source.server)))
+              .docs
+              .isNotEmpty;
+      if (exists || !mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Please log in again'),
+          content: const Text(
+            'Your shop was not found. Please log in again to continue.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      // Offline or server error — keep the employee signed in.
+      debugPrint('Employee shop check skipped: $e');
+    }
+  }
+
+  /// Background server re-check of shop_list after a cache-first load.
+  Future<void> _refreshShopsFromServer() async {
+    final previous = _selectedShopCollection;
+    final ok = await _fetchAllShops(source: Source.server);
+    if (!ok || !mounted) return;
+    // If the shown shop no longer exists, fall back to the first real shop.
+    if (!_shops.any((s) => s['collectionName'] == _selectedShopCollection)) {
+      setState(() {
+        _selectedShopCollection =
+            _shops.isNotEmpty ? _shops[0]['collectionName'] : null;
+        _selectedShopName = _shops.isNotEmpty ? _shops[0]['shopName'] : null;
+      });
+    }
+    if (_selectedShopCollection != null &&
+        _selectedShopCollection != previous) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selectedShopCollection', _selectedShopCollection!);
+      await prefs.setString('selectedShopName', _selectedShopName ?? '');
+    }
+  }
+
+  /// Fetch all shops for admin. Returns true if at least one shop was found.
+  Future<bool> _fetchAllShops({Source source = Source.serverAndCache}) async {
+    try {
+      final snapshot = await _firestore
+          .collection('shop_list')
+          .get(GetOptions(source: source));
+      if (source == Source.cache && snapshot.docs.isEmpty) return false;
 
       List<Map<String, dynamic>> shopsList = [];
       final seenCollectionNames = <String>{};
@@ -152,6 +243,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         });
       }
 
+      if (!mounted) return shopsList.isNotEmpty;
       setState(() {
         _shops = shopsList;
         // DON'T auto-select first shop if we already have a saved selection
@@ -162,9 +254,13 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
         }
         _isLoadingShops = false;
       });
+      return shopsList.isNotEmpty;
     } catch (e) {
       debugPrint('Error fetching shops: $e');
-      setState(() => _isLoadingShops = false);
+      if (source != Source.cache && mounted) {
+        setState(() => _isLoadingShops = false);
+      }
+      return false;
     }
   }
 
@@ -433,7 +529,10 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
   void _navigateToCreateLedger() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const CreateLedgerScreen()),
+      MaterialPageRoute(
+        builder: (context) =>
+            CreateLedgerScreen(shopCollection: _selectedShopCollection),
+      ),
     ).then((_) {
       // Refresh the list when coming back
       setState(() {});
@@ -1206,30 +1305,41 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       final isLedgerClosed =
           (ledger['status'] ?? 'Open').toString().toLowerCase() == 'closed';
 
-      // Get all transactions for this ledger date
-      final transactionsSnapshot = await _firestore
-          .collection(_selectedShopCollection!)
-          .doc('ledgers')
-          .collection('transactions')
-          .where('ledgerDate', isEqualTo: ledgerDate)
-          .get();
-
-      // ✅ Calculate total debit and credit from transactions (EXACT MATCH TO PDF)
-      // Start with opening balance in debit
+      // Sum the day's transactions on the server (two tiny aggregate
+      // replies) instead of downloading every transaction document for
+      // every row in the list.
       double totalDebit = openingBalance;
       double totalCredit = 0.0;
 
-      for (var doc in transactionsSnapshot.docs) {
-        final data = doc.data();
-        final amount = (data['amount'] ?? 0).toDouble();
-        final isCredit = data['isCredit'] == true;
-
-        // Payment IN = DEBIT (isCredit = false) → amount in debit
-        // Payment OUT = CREDIT (isCredit = true) → amount in credit
-        if (isCredit) {
-          totalCredit += amount;
-        } else {
-          totalDebit += amount;
+      final txns = _firestore
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('transactions')
+          .where('ledgerDate', isEqualTo: ledgerDate);
+      try {
+        final sums = await Future.wait([
+          txns.aggregate(sum('amount')).get(),
+          txns
+              .where('isCredit', isEqualTo: true)
+              .aggregate(sum('amount'))
+              .get(),
+        ]);
+        final all = (sums[0].getSum('amount') ?? 0).toDouble();
+        final credit = (sums[1].getSum('amount') ?? 0).toDouble();
+        // Payment IN = DEBIT (isCredit = false), Payment OUT = CREDIT
+        totalDebit += all - credit;
+        totalCredit += credit;
+      } catch (_) {
+        // Offline (aggregates need the server): fall back to the documents.
+        final transactionsSnapshot = await txns.get();
+        for (var doc in transactionsSnapshot.docs) {
+          final data = doc.data();
+          final amount = (data['amount'] ?? 0).toDouble();
+          if (data['isCredit'] == true) {
+            totalCredit += amount;
+          } else {
+            totalDebit += amount;
+          }
         }
       }
 

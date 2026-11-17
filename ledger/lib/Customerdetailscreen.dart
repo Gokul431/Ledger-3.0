@@ -144,31 +144,64 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     return MediaQuery.of(context).orientation == Orientation.landscape;
   }
 
+  Map<String, dynamic> _customerMap(Map<String, dynamic> data) {
+    return {
+      'openingAmount': (data['openingAmount'] ?? 0).toDouble(),
+      'openingDate': data['openingDate'] ?? '',
+      'customerType': data['customerType'] ?? '',
+      'mobile': data['mobile'] ?? '',
+      'createdBy': data['createdBy'] ?? 'Unknown',
+      'status': data['status'] ?? 'Active',
+    };
+  }
+
+  /// Fetches the latest customer document and swaps it in only if it changed.
+  Future<void> _refreshCustomerFromServer(
+    DocumentReference<Map<String, dynamic>> ref,
+    Map<String, dynamic> shown,
+  ) async {
+    try {
+      final fresh = await ref.get(const GetOptions(source: Source.server));
+      if (!mounted || !fresh.exists) return;
+      final freshMap = _customerMap(fresh.data() ?? {});
+      final changed = freshMap.entries.any((e) => shown[e.key] != e.value);
+      if (changed) {
+        setState(() => _customerDataFuture = Future.value(freshMap));
+      }
+    } catch (_) {
+      // Offline — keep showing the saved copy.
+    }
+  }
+
   Future<Map<String, dynamic>> _getCustomerData() async {
     if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
       return {};
     }
 
     try {
-      final customerDoc = await FirebaseFirestore.instance
+      final customerRef = FirebaseFirestore.instance
           .collection(_selectedShopCollection!)
           .doc('customers')
           .collection('list')
-          .doc(widget.customerId)
-          .get();
+          .doc(widget.customerId);
 
-      final data = customerDoc.data() ?? {};
-      final openingAmount = (data['openingAmount'] ?? 0).toDouble();
-      final openingDate = data['openingDate'] ?? '';
+      // Show the copy saved on the phone instantly, then refresh it from the
+      // server in the background (a server round trip is slow on mobile data).
+      try {
+        final cached = await customerRef.get(
+          const GetOptions(source: Source.cache),
+        );
+        if (cached.exists) {
+          final cachedMap = _customerMap(cached.data() ?? {});
+          _refreshCustomerFromServer(customerRef, cachedMap);
+          return cachedMap;
+        }
+      } catch (_) {
+        // Not cached yet — fall through to the server read.
+      }
 
-      return {
-        'openingAmount': openingAmount,
-        'openingDate': openingDate,
-        'customerType': data['customerType'] ?? '',
-        'mobile': data['mobile'] ?? '',
-        'createdBy': data['createdBy'] ?? 'Unknown',
-        'status': data['status'] ?? 'Active',
-      };
+      final customerDoc = await customerRef.get();
+      return _customerMap(customerDoc.data() ?? {});
     } catch (e) {
       print('Error fetching customer data: $e');
       return {};
@@ -1605,7 +1638,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           return FutureBuilder<Map<String, dynamic>>(
             future: _customerData(),
             builder: (context, customerSnapshot) {
-              if (customerSnapshot.connectionState == ConnectionState.waiting) {
+              if (customerSnapshot.connectionState == ConnectionState.waiting &&
+                  !customerSnapshot.hasData) {
                 return _buildProfessionalShimmer(isLandscape);
               }
 

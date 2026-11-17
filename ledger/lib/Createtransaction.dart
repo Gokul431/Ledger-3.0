@@ -211,7 +211,11 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     try {
       final XFile? image = await _imagePicker.pickImage(
         source: source,
-        imageQuality: 85,
+        // Shrink phone-camera photos (often 3-5 MB) to a bill-readable size
+        // so uploads finish in a second or two instead of many seconds.
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 70,
       );
 
       if (image != null) {
@@ -432,57 +436,58 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
         'Payment Type: ${_ledgerPaymentType == LedgerPaymentType.paymentIn ? "Payment IN" : "Payment OUT"}, isCredit=$isCredit',
       );
 
+      // All writes go in one batch: a single network round trip instead of
+      // three sequential ones, and they succeed or fail together.
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+
       // Save customer transaction if it's a customer transaction
       if (_customerLedgerType == CustomerLedgerType.yes) {
-        await FirebaseFirestore.instance
+        final customerRef = db
             .collection(shopCollection)
             .doc('customers')
             .collection('list')
-            .doc(_selectedCustomerId!)
-            .collection('transactions')
-            .add({
-              'amount': amount,
-              'description': description,
-              // Payment IN = DEBIT (isCredit = false)
-              // Payment OUT = CREDIT (isCredit = true)
-              'isCredit': isCredit,
-              'ledgerDate': ledgerDate,
-              'createdAt': FieldValue.serverTimestamp(),
-              if (billPhotoUrl != null) 'billPhotoUrl': billPhotoUrl,
-            });
-
-        await FirebaseFirestore.instance
-            .collection(shopCollection)
-            .doc('customers')
-            .collection('list')
-            .doc(_selectedCustomerId!)
-            .update({'lastTransaction': FieldValue.serverTimestamp()});
+            .doc(_selectedCustomerId!);
+        batch.set(customerRef.collection('transactions').doc(), {
+          'amount': amount,
+          'description': description,
+          // Payment IN = DEBIT (isCredit = false)
+          // Payment OUT = CREDIT (isCredit = true)
+          'isCredit': isCredit,
+          'ledgerDate': ledgerDate,
+          'createdAt': FieldValue.serverTimestamp(),
+          if (billPhotoUrl != null) 'billPhotoUrl': billPhotoUrl,
+        });
+        batch.update(customerRef, {
+          'lastTransaction': FieldValue.serverTimestamp(),
+        });
       }
 
       // Save to shop's ledger collection
-      await FirebaseFirestore.instance
-          .collection(shopCollection)
-          .doc('ledgers')
-          .collection('transactions')
-          .add({
-            'amount': amount,
-            'description': description,
-            'ledgerName': finalLedgerName,
-            // Payment IN = DEBIT (isCredit = false)
-            // Payment OUT = CREDIT (isCredit = true)
-            'isCredit': isCredit,
-            'transactionType': _customerLedgerType == CustomerLedgerType.yes
-                ? 'Customer'
-                : 'General',
-            'ledgerDate': ledgerDate,
-            'createdAt': FieldValue.serverTimestamp(),
-            if (_customerLedgerType == CustomerLedgerType.yes &&
-                _selectedCustomerName != null)
-              'customerName': _selectedCustomerName!,
-            if (_customerLedgerType == CustomerLedgerType.yes)
-              'customerId': _selectedCustomerId!,
-            if (billPhotoUrl != null) 'billPhotoUrl': billPhotoUrl,
-          });
+      batch.set(
+        db.collection(shopCollection).doc('ledgers').collection('transactions').doc(),
+        {
+          'amount': amount,
+          'description': description,
+          'ledgerName': finalLedgerName,
+          // Payment IN = DEBIT (isCredit = false)
+          // Payment OUT = CREDIT (isCredit = true)
+          'isCredit': isCredit,
+          'transactionType': _customerLedgerType == CustomerLedgerType.yes
+              ? 'Customer'
+              : 'General',
+          'ledgerDate': ledgerDate,
+          'createdAt': FieldValue.serverTimestamp(),
+          if (_customerLedgerType == CustomerLedgerType.yes &&
+              _selectedCustomerName != null)
+            'customerName': _selectedCustomerName!,
+          if (_customerLedgerType == CustomerLedgerType.yes)
+            'customerId': _selectedCustomerId!,
+          if (billPhotoUrl != null) 'billPhotoUrl': billPhotoUrl,
+        },
+      );
+
+      await batch.commit();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -659,7 +664,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const AddCustomer(),
+                          builder: (context) =>
+                              AddCustomer(shopCollection: _shopCollection),
                         ),
                       ).then((_) => _loadCustomers());
                     },
@@ -867,7 +873,13 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: SafeArea(
+      // Lift the button bar above the on-screen keyboard so it is never hidden.
+      bottomNavigationBar: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SafeArea(
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -912,6 +924,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
                       ),
                     ),
             ),
+          ),
+        ),
           ),
         ),
       ),

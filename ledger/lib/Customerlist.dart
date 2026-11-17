@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,6 +46,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   /// keeps each customer to a single read until the data is invalidated.
   final Map<String, Future<double>> _outstandingCache = {};
 
+  /// Last balance shown per customer ("shop|customerId" -> amount), kept in
+  /// memory and on the phone. Rows show it instantly instead of a loading
+  /// box, then switch to the fresh server figure the moment it arrives.
+  static final Map<String, double> _lastKnownOutstanding = {};
+  static bool _lastKnownLoaded = false;
+  static const String _lastKnownPrefsKey = 'customerOutstandingCache';
+  Timer? _saveLastKnownTimer;
+
   /// Debounce for the search field so we filter/rebuild once the user pauses
   /// rather than on every character.
   Timer? _searchDebounce;
@@ -61,7 +70,41 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   @override
   void initState() {
     super.initState();
+    _loadLastKnownOutstanding();
     _checkLoginType();
+  }
+
+  Future<void> _loadLastKnownOutstanding() async {
+    if (_lastKnownLoaded) return;
+    _lastKnownLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_lastKnownPrefsKey);
+      if (raw == null) return;
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      map.forEach((k, v) {
+        _lastKnownOutstanding.putIfAbsent(k, () => (v as num).toDouble());
+      });
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Corrupt or missing cache - rows just load normally.
+    }
+  }
+
+  void _rememberOutstanding(String customerId, double amount) {
+    final key = '$_selectedShopCollection|$customerId';
+    if (_lastKnownOutstanding[key] == amount) return;
+    _lastKnownOutstanding[key] = amount;
+    _saveLastKnownTimer?.cancel();
+    _saveLastKnownTimer = Timer(const Duration(seconds: 2), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          _lastKnownPrefsKey,
+          jsonEncode(_lastKnownOutstanding),
+        );
+      } catch (_) {}
+    });
   }
 
   Future<void> _checkLoginType() async {
@@ -79,23 +122,57 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       });
 
       if (loginType == 'client') {
-        final selectedShopCollection = prefs.getString(
-          'selectedShopCollection',
-        );
-        final selectedShopName = prefs.getString('selectedShopName');
+        final savedCollection = prefs.getString('selectedShopCollection');
 
-        if (selectedShopCollection != null &&
-            selectedShopCollection.isNotEmpty) {
-          setState(() {
-            _selectedShopCollection = selectedShopCollection;
-            _selectedShopName = selectedShopName;
-            _isLoadingShops = false;
+        // Always check the saved shop against the CURRENT shop_list. A shop
+        // saved on the phone can be stale — e.g. from the old Firebase
+        // project, or a shop that was removed — and trusting it showed a
+        // shop that doesn't exist with "No customers found".
+        //
+        // The phone's saved copy of shop_list is used first so the list
+        // appears immediately; the server copy then re-checks it.
+        final fromCache = await _fetchAllShops(
+          source: Source.cache,
+          preferred: savedCollection,
+        );
+        if (fromCache) {
+          // Re-validate against the server in the background.
+          _fetchAllShops(source: Source.server).then((ok) async {
+            if (!ok || !mounted || _selectedShopCollection == null) return;
+            await prefs.setString(
+              'selectedShopCollection',
+              _selectedShopCollection!,
+            );
+            await prefs.setString(
+              'selectedShopName',
+              _selectedShopName ?? '',
+            );
           });
-          debugPrint(
-            'Loaded saved shop: $_selectedShopCollection - $_selectedShopName',
-          );
         } else {
-          await _fetchAllShops();
+          await _fetchAllShops(preferred: savedCollection);
+        }
+        Map<String, dynamic>? saved;
+        for (final s in _shops) {
+          if (s['collectionName'] == savedCollection) {
+            saved = s;
+            break;
+          }
+        }
+
+        if (saved != null) {
+          // Take the name from Firestore too, in case it was renamed.
+          setState(() {
+            _selectedShopCollection = saved!['collectionName'];
+            _selectedShopName = saved['shopName'];
+          });
+        }
+        // Overwrite a stale/missing saved shop with the one now shown.
+        if (_selectedShopCollection != null) {
+          await prefs.setString(
+            'selectedShopCollection',
+            _selectedShopCollection!,
+          );
+          await prefs.setString('selectedShopName', _selectedShopName ?? '');
         }
       } else if (loginType == 'employee') {
         setState(() {
@@ -112,33 +189,58 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     }
   }
 
-  Future<void> _fetchAllShops() async {
+  /// Loads shop_list. Returns true if at least one shop was found.
+  ///
+  /// Keeps the currently shown shop (or [preferred]) when it is still in the
+  /// list, so a background refresh never jumps to a different shop.
+  Future<bool> _fetchAllShops({
+    Source source = Source.serverAndCache,
+    String? preferred,
+  }) async {
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('shop_list')
-          .get();
+          .get(GetOptions(source: source));
+      if (source == Source.cache && snapshot.docs.isEmpty) return false;
 
       List<Map<String, dynamic>> shopsList = [];
+      final seen = <String>{};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final collectionName = (data['collectionName'] ?? '').toString();
+        // Skip blank and duplicate entries (same guard as the Ledger list).
+        if (collectionName.isEmpty || !seen.add(collectionName)) continue;
         shopsList.add({
-          'collectionName': data['collectionName'] ?? '',
+          'collectionName': collectionName,
           'shopName': data['shopName'] ?? 'Unknown Shop',
         });
       }
 
+      if (!mounted) return shopsList.isNotEmpty;
       setState(() {
         _shops = shopsList;
         if (shopsList.isNotEmpty) {
-          _selectedShopCollection = shopsList[0]['collectionName'];
-          _selectedShopName = shopsList[0]['shopName'];
+          final keep = preferred ?? _selectedShopCollection;
+          final match = shopsList.firstWhere(
+            (s) => s['collectionName'] == keep,
+            orElse: () => shopsList[0],
+          );
+          _selectedShopCollection = match['collectionName'];
+          _selectedShopName = match['shopName'];
+        } else {
+          _selectedShopCollection = null;
+          _selectedShopName = null;
         }
         _isLoadingShops = false;
       });
+      return shopsList.isNotEmpty;
     } catch (e) {
       debugPrint('Error fetching shops: $e');
-      setState(() => _isLoadingShops = false);
+      if (source != Source.cache && mounted) {
+        setState(() => _isLoadingShops = false);
+      }
+      return false;
     }
   }
 
@@ -189,6 +291,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _saveLastKnownTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -271,10 +374,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
       final totalPaymentIn = totalAll - totalPaymentOut;
       // ✅ CORRECT FORMULA: Outstanding = Opening - Payment IN + Payment OUT
       // Payment IN reduces what customer owes, Payment OUT increases what customer owes
-      return openingAmount - totalPaymentIn + totalPaymentOut;
+      final outstanding =
+          (openingAmount - totalPaymentIn + totalPaymentOut).toDouble();
+      _rememberOutstanding(customerId, outstanding);
+      return outstanding;
     } catch (e) {
       debugPrint('Error calculating outstanding: $e');
-      return openingAmount;
+      // Offline: show the last balance we knew rather than the opening amount.
+      return _lastKnownOutstanding['$_selectedShopCollection|$customerId'] ??
+          openingAmount;
     }
   }
 
@@ -1242,7 +1350,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             icon: Icon(Icons.add_circle_outline, size: isLandscape ? 24 : 26),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const AddCustomer()),
+              MaterialPageRoute(
+                builder: (context) =>
+                    AddCustomer(shopCollection: _selectedShopCollection),
+              ),
             ),
           ),
           SizedBox(width: isLandscape ? 12 : 8),
@@ -1374,6 +1485,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
                             return FutureBuilder<double>(
                               key: ValueKey(customerId),
+                              // Last known balance shows instantly; the fresh
+                              // figure replaces it when the server answers.
+                              initialData: _lastKnownOutstanding[
+                                  '$_selectedShopCollection|$customerId'],
                               future: _outstandingFor(
                                 customerId,
                                 openingAmount,
@@ -1392,7 +1507,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                 }
 
                                 if (outstandingSnapshot.connectionState ==
-                                    ConnectionState.waiting) {
+                                        ConnectionState.waiting &&
+                                    !outstandingSnapshot.hasData) {
                                   return _buildShimmerItem(isLandscape);
                                 }
 

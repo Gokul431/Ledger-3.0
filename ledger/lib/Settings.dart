@@ -56,6 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .collection('shop_list')
           .get();
 
+      if (!mounted) return;
       setState(() {
         _shopCount = snapshot.docs.length;
       });
@@ -64,9 +65,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// 🔹 Simulate loading settings
+  /// Settings are local - show the page immediately (no artificial delay).
   Future<void> _loadSettings() async {
-    await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) {
       setState(() => _isLoading = false);
     }
