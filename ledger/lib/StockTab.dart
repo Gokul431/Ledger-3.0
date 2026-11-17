@@ -27,8 +27,18 @@ class StockTab extends StatefulWidget {
   State<StockTab> createState() => _StockTabState();
 }
 
-class _StockTabState extends State<StockTab> {
+class _StockTabState extends State<StockTab>
+    with AutomaticKeepAliveClientMixin {
+  /// Keep this tab alive inside the TabBarView so switching Ledger ⇄ Stock
+  /// doesn't dispose it and reload everything from Firestore each time.
+  @override
+  bool get wantKeepAlive => true;
+
   bool _isLoading = true;
+
+  /// Bumped on every local edit, so a background server reload that started
+  /// before the edit doesn't overwrite it with older data.
+  int _editVersion = 0;
   bool _isStockClosed = false;
   bool _isClosingStock = false;
   List<QueryDocumentSnapshot> _items = [];
@@ -156,9 +166,70 @@ class _StockTabState extends State<StockTab> {
     }
   }
 
+  // ─── Concurrency-safe writes ─────────────────────────────────────────────
+  //
+  // Several phones can have the Stock tab open at once, each holding the
+  // numbers it loaded earlier. Every stock edit therefore re-reads the item's
+  // CURRENT data inside a Firestore transaction and computes from that —
+  // never from this phone's possibly-stale `_stockEntries` — so one phone can
+  // never overwrite another phone's load or totals.
+
+  /// Runs [compute] on the item entry's current server data in a transaction
+  /// and applies the returned updates. [compute] may run more than once (if
+  /// another phone writes at the same moment), so it must be pure. Returns
+  /// the resulting closingStock, or null if [compute] returned null.
+  Future<double?> _txUpdateEntry(
+    String itemId,
+    Map<String, dynamic>? Function(Map<String, dynamic> fresh) compute,
+  ) {
+    final ref = _stockItemsCol().doc(itemId);
+    return FirebaseFirestore.instance.runTransaction<double?>((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      final updates = compute(snap.data() as Map<String, dynamic>);
+      if (updates == null) return null;
+      tx.update(ref, updates);
+      final closing = updates['closingStock'] ??
+          (snap.data() as Map<String, dynamic>)['closingStock'];
+      return (closing as num?)?.toDouble();
+    });
+  }
+
+  /// Finds a load in the fresh `inEntries` list. Loads are matched by their
+  /// timestamp (stable) rather than list position, because another phone may
+  /// have added or removed loads since this phone loaded the list.
+  int _findLoadIndex(List<dynamic> freshEntries, Map<String, dynamic> target,
+      int fallbackIndex) {
+    final ts = target['timestamp'];
+    if (ts != null) {
+      return freshEntries.indexWhere(
+        (e) => e is Map && e['timestamp'] == ts,
+      );
+    }
+    return fallbackIndex < freshEntries.length ? fallbackIndex : -1;
+  }
+
+  void _showStockError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red[600],
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  static const String _staleLoadMessage =
+      'This load was changed on another phone. The list has been refreshed — please try again.';
+
+  static const String _saveFailedMessage =
+      'Could not save. Check your internet connection and try again.';
+
   /// Recomputes a date's total sales from its item docs and syncs it to the
   /// stockLedger date doc and that date's ledger doc (if one exists).
-  Future<void> _resyncDayTotals(
+  /// Returns the new total.
+  Future<double> _resyncDayTotals(
     String dateStr,
     CollectionReference itemsCol,
   ) async {
@@ -188,6 +259,7 @@ class _StockTabState extends State<StockTab> {
         'saleValue': total,
       }, SetOptions(merge: true));
     }
+    return total;
   }
 
   @override
@@ -198,21 +270,71 @@ class _StockTabState extends State<StockTab> {
 
   Future<void> _initialize() async {
     setState(() => _isLoading = true);
+
+    // Fast path: render instantly from Firestore's on-device cache when it
+    // already holds a complete picture of this day. Nothing is written from
+    // cached data — the server pass below is still the source of truth.
     try {
-      // Step 1 + 2 in parallel
-      final parallel = await Future.wait([
-        _stockDateDoc.get(),
-        _itemsCol.where('isActive', isEqualTo: true).get(),
-      ]);
-
-      final dateDoc = parallel[0] as DocumentSnapshot;
-      if (dateDoc.exists) {
-        final dateData = dateDoc.data() as Map<String, dynamic>?;
-        _isStockClosed = dateData?['isClosed'] ?? false;
+      final shown = await _load(fromCache: true);
+      if (shown && mounted) {
+        setState(() {
+          _rebuildSorted();
+          _isLoading = false;
+        });
       }
+    } catch (e) {
+      debugPrint('StockTab cache load skipped: $e');
+    }
 
-      final itemSnap = parallel[1] as QuerySnapshot;
-      final allItems = itemSnap.docs.cast<QueryDocumentSnapshot>();
+    // Authoritative pass from the server (also creates missing day entries).
+    // If the user edited something while it was in flight, reload once more
+    // so the result includes their edit.
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final applied = await _load(
+          fromCache: false,
+          guardVersion: _editVersion,
+        );
+        if (applied || !mounted) break;
+      } catch (e) {
+        debugPrint('StockTab init error: $e');
+        break;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _rebuildSorted();
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Loads items + this day's stock entries. With [fromCache] it reads only
+  /// the local cache and returns false (changing nothing) if any entry is
+  /// missing, so incomplete data is never shown or written.
+  Future<bool> _load({required bool fromCache, int? guardVersion}) async {
+    final opts = GetOptions(
+      source: fromCache ? Source.cache : Source.serverAndCache,
+    );
+
+    // All three reads are independent — run them together.
+    final parallel = await Future.wait<Object>([
+      _stockDateDoc.get(opts),
+      _itemsCol.where('isActive', isEqualTo: true).get(opts),
+      _stockItemsCol().get(opts),
+    ]);
+
+    final dateDoc = parallel[0] as DocumentSnapshot;
+    final itemSnap = parallel[1] as QuerySnapshot;
+    final entrySnap = parallel[2] as QuerySnapshot;
+
+    bool stockClosed = false;
+    if (dateDoc.exists) {
+      final dateData = dateDoc.data() as Map<String, dynamic>?;
+      stockClosed = dateData?['isClosed'] ?? false;
+    }
+
+    final allItems = itemSnap.docs.cast<QueryDocumentSnapshot>();
 
       // Show items from their openingStockDate onward — once an item starts,
       // it stays on every later ledger day (carried forward), not just its first day.
@@ -221,81 +343,85 @@ class _StockTabState extends State<StockTab> {
         widget.date.month,
         widget.date.day,
       );
-      final endOfDay = startOfDay.add(const Duration(days: 1));
-      _items = allItems.where((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        final ts = data['openingStockDate'] as Timestamp?;
-        if (ts == null) return false;
-        final d = ts.toDate();
-        return d.isBefore(endOfDay);
-      }).toList();
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final items = allItems.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final ts = data['openingStockDate'] as Timestamp?;
+      if (ts == null) return false;
+      final d = ts.toDate();
+      return d.isBefore(endOfDay);
+    }).toList();
 
-      // Step 3: fetch all existing entries for the day in ONE query and index
-      // them by the user-defined itemId. This used to issue a separate `get()`
-      // per item, so opening the Stock tab cost one Firestore round-trip per
-      // item in the shop — the main reason this tab was slow to appear.
-      final entrySnap = await _stockItemsCol().get();
-      final existingEntries = <String, Map<String, dynamic>>{
-        for (final doc in entrySnap.docs)
-          doc.id: doc.data() as Map<String, dynamic>,
-      };
+    // Index the day's existing entries by the user-defined itemId (one query
+    // for all items, not one round-trip per item).
+    final existingEntries = <String, Map<String, dynamic>>{
+      for (final doc in entrySnap.docs)
+        doc.id: doc.data() as Map<String, dynamic>,
+    };
 
-      // Step 4: for missing entries, resolve opening stocks in parallel then write
-      final missingItems = <int>[];
-      for (int i = 0; i < _items.length; i++) {
-        final key = _itemStockKey(_items[i]);
-        final existing = existingEntries[key];
-        if (existing != null) {
-          _stockEntries[key] = existing;
-        } else {
-          missingItems.add(i);
-        }
+    final entries = <String, Map<String, dynamic>>{};
+    final missingItems = <int>[];
+    for (int i = 0; i < items.length; i++) {
+      final key = _itemStockKey(items[i]);
+      final existing = existingEntries[key];
+      if (existing != null) {
+        entries[key] = existing;
+      } else {
+        missingItems.add(i);
       }
+    }
 
-      if (missingItems.isNotEmpty) {
-        final openingStocks = await Future.wait(
-          missingItems.map(
-            (i) => _getOpeningStock(
-              _itemStockKey(_items[i]),
-              _items[i].data() as Map<String, dynamic>,
-            ),
+    // Cache pass: only show when the cached day is complete.
+    if (fromCache && (items.isEmpty || missingItems.isNotEmpty)) return false;
+
+    // Server pass: create missing entries (opening stocks resolved in parallel).
+    if (missingItems.isNotEmpty) {
+      final openingStocks = await Future.wait(
+        missingItems.map(
+          (i) => _getOpeningStock(
+            _itemStockKey(items[i]),
+            items[i].data() as Map<String, dynamic>,
           ),
-        );
+        ),
+      );
 
-        final batch = FirebaseFirestore.instance.batch();
-        for (int j = 0; j < missingItems.length; j++) {
-          final i = missingItems[j];
-          final stockKey = _itemStockKey(_items[i]);
-          final itemData = _items[i].data() as Map<String, dynamic>;
-          final openingStock = openingStocks[j];
+      final batch = FirebaseFirestore.instance.batch();
+      for (int j = 0; j < missingItems.length; j++) {
+        final i = missingItems[j];
+        final stockKey = _itemStockKey(items[i]);
+        final itemData = items[i].data() as Map<String, dynamic>;
+        final openingStock = openingStocks[j];
 
-          final entry = <String, dynamic>{
-            'itemId': stockKey,
-            'itemName': itemData['itemName'] ?? '',
-            'price': (itemData['price'] ?? 0).toDouble(),
-            'openingStock': openingStock,
-            'totalIn': 0.0,
-            'totalOut': 0.0,
-            'closingStock': openingStock,
-            'salesValue': 0.0,
-            'isClosed': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          };
+        final entry = <String, dynamic>{
+          'itemId': stockKey,
+          'itemName': itemData['itemName'] ?? '',
+          'price': (itemData['price'] ?? 0).toDouble(),
+          'openingStock': openingStock,
+          'totalIn': 0.0,
+          'totalOut': 0.0,
+          'closingStock': openingStock,
+          'salesValue': 0.0,
+          'isClosed': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        };
 
-          batch.set(_stockItemsCol().doc(stockKey), entry);
-          _stockEntries[stockKey] = {...entry, 'openingStock': openingStock};
-        }
-        await batch.commit();
+        batch.set(_stockItemsCol().doc(stockKey), entry);
+        entries[stockKey] = {...entry, 'openingStock': openingStock};
       }
-    } catch (e) {
-      debugPrint('StockTab init error: $e');
+      await batch.commit();
     }
-    if (mounted) {
-      setState(() {
-        _rebuildSorted();
-        _isLoading = false;
-      });
-    }
+
+    if (!mounted) return false;
+    // A local edit landed while we were loading — don't clobber it.
+    if (guardVersion != null && guardVersion != _editVersion) return false;
+    // Swap in the freshly loaded state in one go.
+    _isStockClosed = stockClosed;
+    _items = items;
+    _stockEntries
+      ..clear()
+      ..addAll(entries);
+    _bagCache.clear();
+    return true;
   }
 
   /// Find opening stock for today:
@@ -372,6 +498,7 @@ class _StockTabState extends State<StockTab> {
       final doc = await _stockItemsCol().doc(itemId).get();
       if (doc.exists && mounted) {
         setState(() {
+          _editVersion++;
           _stockEntries[itemId] = doc.data() as Map<String, dynamic>;
           _bagCache.remove(itemId);
           _rebuildSorted();
@@ -433,27 +560,29 @@ class _StockTabState extends State<StockTab> {
 
   Future<void> _submitIn(String itemId, StockInResult result) async {
     final qty = result.totalQty;
+    // Fixed outside the transaction so a retry writes the same load.
+    final newLoad = {
+      'qty': qty,
+      'bags': result.bagEntries,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
     try {
-      final entry = _stockEntries[itemId] ?? {};
-      final currentIn = (entry['totalIn'] ?? 0).toDouble();
-      final currentOpening = (entry['openingStock'] ?? 0).toDouble();
-      final currentOut = (entry['totalOut'] ?? 0).toDouble();
-      final newTotalIn = currentIn + qty;
-      final newClosing = currentOpening + newTotalIn - currentOut;
-
-      final batch = FirebaseFirestore.instance.batch();
-      batch.update(_stockItemsCol().doc(itemId), {
-        'totalIn': newTotalIn,
-        'closingStock': newClosing,
-        'inEntries': FieldValue.arrayUnion([
-          {
-            'qty': qty,
-            'bags': result.bagEntries,
-            'timestamp': DateTime.now().toIso8601String(),
-          },
-        ]),
+      final newClosing = await _txUpdateEntry(itemId, (d) {
+        final opening = (d['openingStock'] ?? 0).toDouble();
+        final totalIn = (d['totalIn'] ?? 0).toDouble();
+        final totalOut = (d['totalOut'] ?? 0).toDouble();
+        final newTotalIn = totalIn + qty;
+        return {
+          'totalIn': newTotalIn,
+          'closingStock': opening + newTotalIn - totalOut,
+          'inEntries': [...(d['inEntries'] as List<dynamic>? ?? []), newLoad],
+        };
       });
-      await batch.commit();
+      if (newClosing == null) {
+        await _refreshEntry(itemId);
+        _showStockError(_saveFailedMessage);
+        return;
+      }
       await _cascadeClosingForward(itemId, widget.date, newClosing);
 
       await _refreshEntry(itemId);
@@ -474,6 +603,7 @@ class _StockTabState extends State<StockTab> {
       }
     } catch (e) {
       debugPrint('IN submit error: $e');
+      _showStockError(_saveFailedMessage);
     }
   }
 
@@ -506,54 +636,43 @@ class _StockTabState extends State<StockTab> {
   ///   Sold = (Opening + New Stock) − Closing Stock
   ///   Sales Value = Sold × Price
   Future<void> _recordClosingStock(String itemId, StockOutResult result) async {
+    final timestamp = DateTime.now().toIso8601String();
     try {
-      final entry = _stockEntries[itemId] ?? {};
-      final price = (entry['price'] ?? 0).toDouble();
-      final opening = (entry['openingStock'] ?? 0).toDouble();
-      final totalIn = (entry['totalIn'] ?? 0).toDouble();
-      final available = opening + totalIn;
-      final newClosing = result.totalQty.clamp(0.0, available).toDouble();
-      final newTotalOut = available - newClosing;
-      final newSalesValue = newTotalOut * price;
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      batch.update(_stockItemsCol().doc(itemId), {
-        'outEntries': [
-          {
-            'closingQty': newClosing,
-            'soldQty': newTotalOut,
-            'bags': result.bagEntries,
-            'timestamp': DateTime.now().toIso8601String(),
-          },
-        ],
-        'totalOut': newTotalOut,
-        'closingStock': newClosing,
-        'salesValue': newSalesValue,
+      // Opening, new stock and price come from the CURRENT server data, so
+      // loads added on another phone are included in Sold / Sales Value.
+      final newClosing = await _txUpdateEntry(itemId, (d) {
+        final price = (d['price'] ?? 0).toDouble();
+        final opening = (d['openingStock'] ?? 0).toDouble();
+        final totalIn = (d['totalIn'] ?? 0).toDouble();
+        final available = opening + totalIn;
+        final closing = result.totalQty.clamp(0.0, available).toDouble();
+        final totalOut = available - closing;
+        return {
+          'outEntries': [
+            {
+              'closingQty': closing,
+              'soldQty': totalOut,
+              'bags': result.bagEntries,
+              'timestamp': timestamp,
+            },
+          ],
+          'totalOut': totalOut,
+          'closingStock': closing,
+          'salesValue': totalOut * price,
+        };
       });
-
-      // Recalculate total sales across all items and sync to ledger doc
-      double newTotalSales = newSalesValue;
-      for (final itemDoc in _items) {
-        final key = _itemStockKey(itemDoc);
-        if (key == itemId) continue;
-        final e = _stockEntries[key] ?? {};
-        newTotalSales += (e['salesValue'] ?? 0).toDouble();
+      if (newClosing == null) {
+        await _refreshEntry(itemId);
+        _showStockError(_saveFailedMessage);
+        return;
       }
 
-      batch.set(
-        _stockDateDoc as DocumentReference<Map<String, dynamic>>,
-        {'totalSalesValue': newTotalSales},
-        SetOptions(merge: true),
+      // Day total summed from every item's CURRENT server data (not this
+      // phone's copy), then synced to the stock date doc and cash ledger.
+      final newTotalSales = await _resyncDayTotals(
+        _ledgerDate,
+        _stockItemsCol(),
       );
-
-      if (widget.ledgerRef != null) {
-        batch.set(widget.ledgerRef!, {
-          'saleValue': newTotalSales,
-        }, SetOptions(merge: true));
-      }
-
-      await batch.commit();
       await _cascadeClosingForward(itemId, widget.date, newClosing);
       _bagCache.remove(itemId);
       await _refreshEntry(itemId);
@@ -574,6 +693,7 @@ class _StockTabState extends State<StockTab> {
       }
     } catch (e) {
       debugPrint('Closing stock update error: $e');
+      _showStockError(_saveFailedMessage);
     }
   }
 
@@ -584,34 +704,42 @@ class _StockTabState extends State<StockTab> {
     StockInResult result,
   ) async {
     try {
-      final entry = _stockEntries[itemId] ?? {};
-      final inEntries = List<dynamic>.from(
-        entry['inEntries'] as List<dynamic>? ?? [],
+      // The load as this phone shows it — used only to identify it.
+      final shown = List<dynamic>.from(
+        _stockEntries[itemId]?['inEntries'] as List<dynamic>? ?? [],
       );
-      if (loadIndex >= inEntries.length) return;
+      if (loadIndex >= shown.length) return;
+      final target = Map<String, dynamic>.from(shown[loadIndex] as Map);
+      final fallbackTs = DateTime.now().toIso8601String();
 
-      final oldQty = (inEntries[loadIndex]['qty'] as num?)?.toDouble() ?? 0;
-      inEntries[loadIndex] = {
-        'qty': result.totalQty,
-        'bags': result.bagEntries,
-        'timestamp':
-            inEntries[loadIndex]['timestamp'] ??
-            DateTime.now().toIso8601String(),
-      };
+      final newClosing = await _txUpdateEntry(itemId, (d) {
+        final inEntries = List<dynamic>.from(
+          d['inEntries'] as List<dynamic>? ?? [],
+        );
+        final i = _findLoadIndex(inEntries, target, loadIndex);
+        if (i < 0) return null; // removed/changed on another phone
 
-      final opening = (entry['openingStock'] ?? 0).toDouble();
-      final currentTotalIn = (entry['totalIn'] ?? 0).toDouble();
-      final newTotalIn = currentTotalIn - oldQty + result.totalQty;
-      final totalOut = (entry['totalOut'] ?? 0).toDouble();
-      final newClosing = opening + newTotalIn - totalOut;
-
-      final batch = FirebaseFirestore.instance.batch();
-      batch.update(_stockItemsCol().doc(itemId), {
-        'inEntries': inEntries,
-        'totalIn': newTotalIn,
-        'closingStock': newClosing,
+        final oldQty = (inEntries[i]['qty'] as num?)?.toDouble() ?? 0;
+        inEntries[i] = {
+          'qty': result.totalQty,
+          'bags': result.bagEntries,
+          'timestamp': inEntries[i]['timestamp'] ?? fallbackTs,
+        };
+        final opening = (d['openingStock'] ?? 0).toDouble();
+        final newTotalIn =
+            (d['totalIn'] ?? 0).toDouble() - oldQty + result.totalQty;
+        final totalOut = (d['totalOut'] ?? 0).toDouble();
+        return {
+          'inEntries': inEntries,
+          'totalIn': newTotalIn,
+          'closingStock': opening + newTotalIn - totalOut,
+        };
       });
-      await batch.commit();
+      if (newClosing == null) {
+        await _refreshEntry(itemId);
+        _showStockError(_staleLoadMessage);
+        return;
+      }
       await _cascadeClosingForward(itemId, widget.date, newClosing);
       await _refreshEntry(itemId);
 
@@ -629,6 +757,7 @@ class _StockTabState extends State<StockTab> {
       }
     } catch (e) {
       debugPrint('Update load error: $e');
+      _showStockError(_saveFailedMessage);
     }
   }
 
@@ -669,26 +798,36 @@ class _StockTabState extends State<StockTab> {
     if (!confirmed) return;
 
     try {
-      final entry = _stockEntries[itemId] ?? {};
-      final inEntries = List<dynamic>.from(
-        entry['inEntries'] as List<dynamic>? ?? [],
+      // The load as this phone shows it — used only to identify it.
+      final shown = List<dynamic>.from(
+        _stockEntries[itemId]?['inEntries'] as List<dynamic>? ?? [],
       );
-      if (loadIndex >= inEntries.length) return;
+      if (loadIndex >= shown.length) return;
+      final target = Map<String, dynamic>.from(shown[loadIndex] as Map);
 
-      final removedQty = (inEntries[loadIndex]['qty'] as num?)?.toDouble() ?? 0;
-      inEntries.removeAt(loadIndex);
+      final newClosing = await _txUpdateEntry(itemId, (d) {
+        final inEntries = List<dynamic>.from(
+          d['inEntries'] as List<dynamic>? ?? [],
+        );
+        final i = _findLoadIndex(inEntries, target, loadIndex);
+        if (i < 0) return null; // already removed/changed on another phone
 
-      final opening = (entry['openingStock'] ?? 0).toDouble();
-      final currentTotalIn = (entry['totalIn'] ?? 0).toDouble();
-      final newTotalIn = currentTotalIn - removedQty;
-      final totalOut = (entry['totalOut'] ?? 0).toDouble();
-      final newClosing = opening + newTotalIn - totalOut;
-
-      await _stockItemsCol().doc(itemId).update({
-        'inEntries': inEntries,
-        'totalIn': newTotalIn,
-        'closingStock': newClosing,
+        final removedQty = (inEntries[i]['qty'] as num?)?.toDouble() ?? 0;
+        inEntries.removeAt(i);
+        final opening = (d['openingStock'] ?? 0).toDouble();
+        final newTotalIn = (d['totalIn'] ?? 0).toDouble() - removedQty;
+        final totalOut = (d['totalOut'] ?? 0).toDouble();
+        return {
+          'inEntries': inEntries,
+          'totalIn': newTotalIn,
+          'closingStock': opening + newTotalIn - totalOut,
+        };
       });
+      if (newClosing == null) {
+        await _refreshEntry(itemId);
+        _showStockError(_staleLoadMessage);
+        return;
+      }
       await _cascadeClosingForward(itemId, widget.date, newClosing);
       await _refreshEntry(itemId);
 
@@ -706,6 +845,7 @@ class _StockTabState extends State<StockTab> {
       }
     } catch (e) {
       debugPrint('Delete load error: $e');
+      _showStockError(_saveFailedMessage);
     }
   }
 
@@ -717,41 +857,24 @@ class _StockTabState extends State<StockTab> {
     if (!confirmed) return;
 
     try {
-      final entry = _stockEntries[itemId] ?? {};
-      final opening = (entry['openingStock'] ?? 0).toDouble();
-      final totalIn = (entry['totalIn'] ?? 0).toDouble();
-      final newClosing = opening + totalIn;
-
-      final batch = FirebaseFirestore.instance.batch();
-      batch.update(_stockItemsCol().doc(itemId), {
-        'outEntries': [],
-        'totalOut': 0,
-        'closingStock': newClosing,
-        'salesValue': 0,
+      final newClosing = await _txUpdateEntry(itemId, (d) {
+        final opening = (d['openingStock'] ?? 0).toDouble();
+        final totalIn = (d['totalIn'] ?? 0).toDouble();
+        return {
+          'outEntries': [],
+          'totalOut': 0,
+          'closingStock': opening + totalIn,
+          'salesValue': 0,
+        };
       });
-
-      // Recalculate total sales across all items (this item's contributes 0 now)
-      double newTotalSales = 0;
-      for (final itemDoc in _items) {
-        final key = _itemStockKey(itemDoc);
-        if (key == itemId) continue;
-        final e = _stockEntries[key] ?? {};
-        newTotalSales += (e['salesValue'] ?? 0).toDouble();
+      if (newClosing == null) {
+        await _refreshEntry(itemId);
+        _showStockError(_saveFailedMessage);
+        return;
       }
 
-      batch.set(
-        _stockDateDoc as DocumentReference<Map<String, dynamic>>,
-        {'totalSalesValue': newTotalSales},
-        SetOptions(merge: true),
-      );
-
-      if (widget.ledgerRef != null) {
-        batch.set(widget.ledgerRef!, {
-          'saleValue': newTotalSales,
-        }, SetOptions(merge: true));
-      }
-
-      await batch.commit();
+      // Day total from every item's CURRENT server data.
+      await _resyncDayTotals(_ledgerDate, _stockItemsCol());
       await _cascadeClosingForward(itemId, widget.date, newClosing);
       _bagCache.remove(itemId);
       await _refreshEntry(itemId);
@@ -770,11 +893,44 @@ class _StockTabState extends State<StockTab> {
       }
     } catch (e) {
       debugPrint('Delete closing error: $e');
+      _showStockError(_saveFailedMessage);
     }
   }
 
   // ─── Close Stock ─────────────────────────────────────────────────────────
+  /// Re-reads every item entry for the day from the server so a summary or
+  /// close reflects edits made on other phones. Returns false on failure.
+  Future<bool> _reloadEntriesFromServer() async {
+    try {
+      final snap = await _stockItemsCol().get(
+        const GetOptions(source: Source.server),
+      );
+      if (!mounted) return false;
+      setState(() {
+        _editVersion++;
+        for (final doc in snap.docs) {
+          _stockEntries[doc.id] = doc.data() as Map<String, dynamic>;
+        }
+        _bagCache.clear();
+        _rebuildSorted();
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Reload entries error: $e');
+      return false;
+    }
+  }
+
   Future<void> _closeStock() async {
+    // Get the latest numbers from every phone before summarising/closing.
+    setState(() => _isClosingStock = true);
+    final fresh = await _reloadEntriesFromServer();
+    if (mounted) setState(() => _isClosingStock = false);
+    if (!fresh) {
+      _showStockError(_saveFailedMessage);
+      return;
+    }
+
     // Build summary before showing dialog
     double previewTotal = 0;
     final List<Map<String, dynamic>> itemSummary = [];
@@ -1009,10 +1165,9 @@ class _StockTabState extends State<StockTab> {
         final closingStock = (entry['closingStock'] ?? 0).toDouble();
         totalSalesValue += salesValue;
 
-        batch.update(_stockItemsCol().doc(itemId), {
-          'isClosed': true,
-          'closingStock': closingStock,
-        });
+        // Only mark closed — don't re-write closingStock from this phone's
+        // copy, so it can never overwrite a newer value.
+        batch.update(_stockItemsCol().doc(itemId), {'isClosed': true});
         batch.update(itemDoc.reference, {
           'lastClosingStock': closingStock,
           'lastClosingDate': Timestamp.fromDate(widget.date),
@@ -1035,6 +1190,7 @@ class _StockTabState extends State<StockTab> {
       await batch.commit();
 
       setState(() {
+        _editVersion++;
         _isStockClosed = true;
         _isClosingStock = false;
       });
@@ -1065,6 +1221,7 @@ class _StockTabState extends State<StockTab> {
   // ─── UI ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
     if (_isLoading) {
       return Shimmer.fromColors(
         baseColor: Colors.grey[200]!,

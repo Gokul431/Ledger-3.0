@@ -159,6 +159,69 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
     }
   }
 
+  /// A price change takes effect from TODAY onward, until the next change.
+  ///
+  /// Each stock day freezes the item's price when that day's record is first
+  /// created, so a day already opened today (or opened ahead) would otherwise
+  /// keep the old price. This updates the price — and recalculates sales — on
+  /// the existing records for today and any later days, skipping days whose
+  /// stock is already closed so past/closed figures never change. Days not
+  /// created yet pick up the new master price automatically.
+  ///
+  /// Returns true if today's stock was already closed (the new price will
+  /// then start from tomorrow).
+  Future<bool> _applyPriceFromToday(String itemKey, double newPrice) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final datesCol = FirebaseFirestore.instance
+        .collection(widget.shopCollection)
+        .doc('stockLedger')
+        .collection('dates');
+
+    // Today plus up to 30 days ahead (in case future ledgers were opened).
+    final dateStrs = List.generate(
+      31,
+      (i) => DateFormat('dd-MMM-yyyy').format(today.add(Duration(days: i))),
+    );
+    final results = await Future.wait([
+      Future.wait(dateStrs.map((s) => datesCol.doc(s).get())),
+      Future.wait(
+        dateStrs.map((s) => datesCol.doc(s).collection('items').doc(itemKey).get()),
+      ),
+    ]);
+    final dateDocs = results[0];
+    final itemDocs = results[1];
+
+    bool todayClosed = false;
+    for (int i = 0; i < dateStrs.length; i++) {
+      final itemSnap = itemDocs[i];
+      if (!itemSnap.exists) continue;
+
+      final dayData = dateDocs[i].data();
+      final dayClosed = dayData != null && dayData['isClosed'] == true;
+      if (dayClosed) {
+        if (i == 0) todayClosed = true;
+        continue; // never rewrite a closed day's figures
+      }
+
+      final d = itemSnap.data()!;
+      if ((d['price'] ?? 0).toDouble() == newPrice) continue;
+
+      final totalOut = (d['totalOut'] ?? 0).toDouble();
+      await itemSnap.reference.update({
+        'price': newPrice,
+        'salesValue': totalOut * newPrice,
+      });
+      if (totalOut > 0) {
+        await _resyncDayTotals(
+          dateStrs[i],
+          datesCol.doc(dateStrs[i]).collection('items'),
+        );
+      }
+    }
+    return todayClosed;
+  }
+
   /// Recomputes a date's total sales from its item docs and syncs it to the
   /// stockLedger date doc and that date's ledger doc (if one exists).
   Future<void> _resyncDayTotals(
@@ -219,6 +282,7 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
     try {
       final price = double.tryParse(_priceController.text.trim()) ?? 0;
       final openingStock = double.tryParse(_stockController.text.trim()) ?? 0;
+      bool priceStartsTomorrow = false;
 
       final col = FirebaseFirestore.instance
           .collection(widget.shopCollection)
@@ -262,6 +326,13 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
         // Only safe to cascade when the ledger key (itemId) didn't change —
         // a rename would point at a different stock ledger document entirely.
         final keyUnchanged = originalKey == itemId;
+
+        // New price applies from today onward (before the opening cascade,
+        // so any sales it recalculates use the new price).
+        final originalPrice = (existingData['price'] ?? 0).toDouble();
+        if (keyUnchanged && originalPrice != price) {
+          priceStartsTomorrow = await _applyPriceFromToday(itemId, price);
+        }
         final valueChanged = originalOpening != openingStock ||
             originalDateOnly != selectedDateOnly;
         if (keyUnchanged && valueChanged) {
@@ -277,9 +348,11 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isEdit
-                ? 'Item updated successfully'
-                : 'Item added successfully'),
+            content: Text(!isEdit
+                ? 'Item added successfully'
+                : priceStartsTomorrow
+                    ? 'Item updated. Today\'s stock is already closed, so the new price applies from tomorrow.'
+                    : 'Item updated successfully'),
             backgroundColor: Colors.green[700],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

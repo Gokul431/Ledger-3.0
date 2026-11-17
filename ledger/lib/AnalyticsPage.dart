@@ -62,38 +62,38 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           .collection('shop_list')
           .get();
 
-      List<Map<String, String>> shops = [];
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>?;
-        if (data == null) continue;
-
-        final collectionName = data['collectionName'] ?? '';
-
-        // ✅ Fetch shop name from the actual shop collection's Credentials document
-        try {
-          final credentialsDoc = await FirebaseFirestore.instance
-              .collection(collectionName)
+      // Fetch every shop's Credentials doc in parallel (was one-by-one).
+      final collectionNames = <String>[
+        for (final doc in snapshot.docs)
+          if (doc.data() is Map<String, dynamic>)
+            ((doc.data() as Map<String, dynamic>)['collectionName'] ?? '')
+                .toString(),
+      ].where((n) => n.isNotEmpty).toList();
+      final credentialDocs = await Future.wait(
+        collectionNames.map(
+          (name) => FirebaseFirestore.instance
+              .collection(name)
               .doc('Credentials')
-              .get();
+              .get()
+              .then<DocumentSnapshot<Map<String, dynamic>>?>((d) => d)
+              .catchError((Object e) {
+                debugPrint('❌ Shop $name not accessible: $e');
+                return null;
+              }),
+        ),
+      );
 
-          if (credentialsDoc.exists) {
-            final credentialsData = credentialsDoc.data() ?? {};
-            final actualShopName =
-                credentialsData['shopName'] ?? 'Unknown Shop';
-
-            shops.add({
-              'id': collectionName,
-              'name': actualShopName.toUpperCase(),
-            });
-
-            debugPrint('✅ Shop loaded: $collectionName → $actualShopName');
-          } else {
-            debugPrint('❌ No Credentials document for $collectionName');
-          }
-        } catch (e) {
-          debugPrint('❌ Shop $collectionName not accessible: $e');
-        }
+      // Keep the original shop order.
+      final List<Map<String, String>> shops = [];
+      for (int i = 0; i < collectionNames.length; i++) {
+        final credentialsDoc = credentialDocs[i];
+        if (credentialsDoc == null || !credentialsDoc.exists) continue;
+        final actualShopName =
+            (credentialsDoc.data()?['shopName'] ?? 'Unknown Shop').toString();
+        shops.add({
+          'id': collectionNames[i],
+          'name': actualShopName.toUpperCase(),
+        });
       }
 
       setState(() {
@@ -276,42 +276,60 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       final startOfMonth = DateTime(now.year, now.month, 1);
       final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
 
-      final transactionSnapshot = await FirebaseFirestore.instance
+      final col = FirebaseFirestore.instance
           .collection(_selectedShopId!)
           .doc('ledgers')
-          .collection('transactions')
-          .orderBy('createdAt', descending: true)
-          .get();
+          .collection('transactions');
 
-      double totalCredit = 0;
-      double totalDebit = 0;
+      // All-time totals come from server-side aggregations, and only this
+      // month/week's transactions are downloaded. Previously EVERY transaction
+      // ever recorded was downloaded on each visit, so this page got slower
+      // every day.
+      final windowStart = startOfWeek.isBefore(startOfMonth)
+          ? startOfWeek
+          : startOfMonth;
+      final results = await Future.wait<Object>([
+        col.aggregate(count(), sum('amount')).get(),
+        col.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
+        col.where('transactionType', isEqualTo: 'Customer').count().get(),
+        col
+            .where(
+              'createdAt',
+              isGreaterThan: Timestamp.fromDate(windowStart),
+            )
+            .get(),
+      ]);
+      final allAgg = results[0] as AggregateQuerySnapshot;
+      final creditAgg = results[1] as AggregateQuerySnapshot;
+      final customerAgg = results[2] as AggregateQuerySnapshot;
+      final recentSnapshot = results[3] as QuerySnapshot<Map<String, dynamic>>;
+
+      final int totalTransactions = allAgg.count ?? 0;
+      // Docs without isCredit count as debit, same as `?? false` before.
+      double totalCredit = creditAgg.getSum('amount') ?? 0;
+      double totalDebit = (allAgg.getSum('amount') ?? 0) - totalCredit;
       double monthCredit = 0;
       double monthDebit = 0;
       double weekCredit = 0;
       double weekDebit = 0;
-      int totalTransactions = transactionSnapshot.docs.length;
       int monthTransactions = 0;
       int weekTransactions = 0;
 
-      Map<String, int> transactionTypes = {};
+      // Only "Customer" is ever written; anything else (or missing) is
+      // "General" — same buckets the old per-doc loop produced.
+      final customerCount = customerAgg.count ?? 0;
+      final Map<String, int> transactionTypes = {
+        if (customerCount > 0) 'Customer': customerCount,
+        if (totalTransactions - customerCount > 0)
+          'General': totalTransactions - customerCount,
+      };
 
-      for (var doc in transactionSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>?;
-        if (data == null) continue;
+      for (var doc in recentSnapshot.docs) {
+        final data = doc.data();
 
         final amount = (data['amount'] ?? 0).toDouble();
         final isCredit = data['isCredit'] ?? false;
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-        final transactionType = data['transactionType'] ?? 'General';
-
-        transactionTypes[transactionType] =
-            (transactionTypes[transactionType] ?? 0) + 1;
-
-        if (isCredit) {
-          totalCredit += amount;
-        } else {
-          totalDebit += amount;
-        }
 
         if (createdAt != null) {
           if (createdAt.isAfter(startOfMonth)) {

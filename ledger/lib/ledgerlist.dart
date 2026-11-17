@@ -41,6 +41,11 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
   Stream<QuerySnapshot>? _ledgersStream;
   String? _ledgersStreamKey;
 
+  /// Memoised balance-difference futures, one per ledger row. Previously each
+  /// row's FutureBuilder called `_calculateBalanceDifference` inline, so every
+  /// rebuild/scroll re-queried that day's transactions from the server.
+  final Map<String, Future<double>> _balanceDiffCache = {};
+
   Timer? _searchDebounce;
 
   @override
@@ -489,7 +494,34 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
 
   /// Handle pull to refresh
   Future<void> _handleRefresh() async {
-    setState(() {});
+    setState(() => _balanceDiffCache.clear());
+  }
+
+  /// Stable per-ledger future. The key folds in every ledger field the result
+  /// depends on — `closingBalance` is rewritten whenever that day's
+  /// transactions change — so the value is recomputed only when it can
+  /// actually differ.
+  Future<double> _balanceDiffFor(String ledgerDate, Map<String, dynamic> ledger) {
+    final key = [
+      _selectedShopCollection,
+      ledgerDate,
+      ledger['openingBalance'],
+      ledger['closingBalance'],
+      ledger['saleValue'],
+      ledger['cashOut'],
+      ledger['status'],
+    ].join('|');
+    final cached = _balanceDiffCache[key];
+    if (cached != null) return cached;
+
+    // Keep only the newest entry per ledger date so the map can't grow.
+    _balanceDiffCache.removeWhere(
+      (k, _) => k.startsWith('$_selectedShopCollection|$ledgerDate|'),
+    );
+    return _balanceDiffCache[key] = _calculateBalanceDifference(
+      ledgerDate,
+      ledger,
+    );
   }
 
   /// Get ledger stream for selected shop.
@@ -1477,7 +1509,7 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
                   ),
                 ),
                 FutureBuilder<double>(
-                  future: _calculateBalanceDifference(ledgerDate, ledger),
+                  future: _balanceDiffFor(ledgerDate, ledger),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return SizedBox(

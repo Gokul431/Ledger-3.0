@@ -89,30 +89,32 @@ class _StockAnalyticsPageState extends State<StockAnalyticsPage>
         return (date: d, str: DateFormat('dd-MMM-yyyy').format(d));
       });
 
-      // 3. Fetch all entries in parallel per item
-      final Map<String, Map<String, Map<String, dynamic>>> history = {};
+      // 3. One query per DAY (all items for that day) instead of one document
+      //    read per item per day — e.g. 30 requests instead of 20 × 30 = 600.
+      final Map<String, Map<String, Map<String, dynamic>>> history = {
+        for (final item in items) item.id: <String, Map<String, dynamic>>{},
+      };
 
-      await Future.wait(items.map((item) async {
-        final docs = await Future.wait(dates.map((d) => FirebaseFirestore
-            .instance
-            .collection(widget.shopCollection)
-            .doc('stockLedger')
-            .collection('dates')
-            .doc(d.str)
-            .collection('items')
-            .doc(item.id)
-            .get()
-            .catchError((_) => null as DocumentSnapshot<Map<String, dynamic>>?)));
+      final daySnaps = await Future.wait(dates.map((d) => FirebaseFirestore
+          .instance
+          .collection(widget.shopCollection)
+          .doc('stockLedger')
+          .collection('dates')
+          .doc(d.str)
+          .collection('items')
+          .get()
+          .then<QuerySnapshot<Map<String, dynamic>>?>((s) => s)
+          .catchError((_) => null)));
 
-        final Map<String, Map<String, dynamic>> itemHistory = {};
-        for (int i = 0; i < dates.length; i++) {
-          final doc = docs[i];
-          if (doc != null && doc.exists) {
-            itemHistory[dates[i].str] = doc.data() as Map<String, dynamic>;
-          }
+      for (int i = 0; i < dates.length; i++) {
+        final snap = daySnaps[i];
+        if (snap == null) continue;
+        for (final doc in snap.docs) {
+          // Entries are keyed by the item's stock key (doc id); ignore any
+          // entry whose item no longer exists, as before.
+          history[doc.id]?[dates[i].str] = doc.data();
         }
-        history[item.id] = itemHistory;
-      }));
+      }
 
       if (mounted) {
         setState(() {

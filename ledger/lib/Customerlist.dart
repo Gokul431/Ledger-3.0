@@ -249,30 +249,26 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     double openingAmount,
   ) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final txns = FirebaseFirestore.instance
           .collection(_selectedShopCollection!)
           .doc('customers')
           .collection('list')
           .doc(customerId)
-          .collection('transactions')
-          .get();
+          .collection('transactions');
 
-      double totalPaymentIn = 0;
-      double totalPaymentOut = 0;
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final amount = (data['amount'] ?? 0).toDouble();
-        final isCredit = data['isCredit'] ?? false;
-
-        // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE outstanding (subtract)
-        // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE outstanding (add)
-        if (isCredit) {
-          totalPaymentOut += amount; // Payment OUT (CREDIT)
-        } else {
-          totalPaymentIn += amount; // Payment IN (DEBIT)
-        }
-      }
+      // Server-side sums instead of downloading the customer's entire
+      // transaction history for every row (which got slower as history grew).
+      // "All" minus "OUT" = "IN", which also counts old docs that have no
+      // isCredit field as Payment IN — same as the previous `?? false`.
+      final results = await Future.wait([
+        txns.aggregate(sum('amount')).get(),
+        txns.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
+      ]);
+      final totalAll = results[0].getSum('amount') ?? 0;
+      // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE outstanding
+      final totalPaymentOut = results[1].getSum('amount') ?? 0;
+      // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE outstanding
+      final totalPaymentIn = totalAll - totalPaymentOut;
       // ✅ CORRECT FORMULA: Outstanding = Opening - Payment IN + Payment OUT
       // Payment IN reduces what customer owes, Payment OUT increases what customer owes
       return openingAmount - totalPaymentIn + totalPaymentOut;

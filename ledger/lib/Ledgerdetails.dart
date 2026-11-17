@@ -67,6 +67,10 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   /// the value actually changes rather than on every rebuild.
   double? _lastWrittenClosing;
 
+  /// True once the ledger doc has been confirmed from the server (not just
+  /// the on-device cache). Gates closing-balance writes.
+  bool _ledgerFromServer = false;
+
   @override
   void initState() {
     super.initState();
@@ -164,7 +168,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     }
   }
 
-  /// Fetch ledger document by ledgerDate from shop collection
+  /// Fetch ledger document by ledgerDate from shop collection.
+  ///
+  /// Shows the on-device cached copy instantly (if any), then confirms with
+  /// the server. Closing-balance writes wait for the server copy so a stale
+  /// cached opening balance can never be written back.
   Future<void> _fetchLedgerByDate() async {
     if (!mounted) return;
     if (_selectedShopCollection == null || _selectedShopCollection!.isEmpty) {
@@ -174,21 +182,37 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     }
 
     final ledgerDate = DateFormat('dd-MMM-yyyy').format(widget.date);
+    final ledgerQuery = FirebaseFirestore.instance
+        .collection(_selectedShopCollection!)
+        .doc('ledgers')
+        .collection('dates')
+        .where('ledgerDate', isEqualTo: ledgerDate)
+        .limit(1);
+
+    // Fast path: cached copy (no network wait).
+    if (_ledgerData == null) {
+      try {
+        final cached = await ledgerQuery.get(
+          const GetOptions(source: Source.cache),
+        );
+        if (mounted && cached.docs.isNotEmpty && !_ledgerFromServer) {
+          final doc = cached.docs.first;
+          final data = doc.data();
+          final status = (data['status'] ?? 'Open').toString().toLowerCase();
+          setState(() {
+            _ledgerData = data;
+            _ledgerRef = doc.reference;
+            _isLedgerClosed = (status == 'closed');
+            _isLoading = false;
+          });
+        }
+      } catch (_) {
+        // Not cached yet — fall through to the server read.
+      }
+    }
 
     try {
-      debugPrint(
-        'Fetching ledger from: $_selectedShopCollection/ledgers/dates for date: $ledgerDate',
-      );
-
-      final query = await FirebaseFirestore.instance
-          .collection(
-            _selectedShopCollection!,
-          ) // ✅ Using correct shop collection
-          .doc('ledgers')
-          .collection('dates')
-          .where('ledgerDate', isEqualTo: ledgerDate)
-          .limit(1)
-          .get();
+      final query = await ledgerQuery.get();
 
       if (!mounted) return;
 
@@ -196,13 +220,12 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
         final doc = query.docs.first;
         final data = doc.data();
 
-        debugPrint('Ledger found: ${doc.id}');
-
         final status = (data['status'] ?? 'Open').toString().toLowerCase();
 
         setState(() {
           _ledgerData = data;
           _ledgerRef = doc.reference;
+          _ledgerFromServer = true;
           // A different ledger document may hold a different stored closing
           // balance, so forget what we last wrote and let it be recomputed.
           _lastWrittenClosing = null;
@@ -306,7 +329,7 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
   /// not write during the build phase: it skips no-op writes and defers the
   /// real one to after the current frame.
   void _updateClosingBalance(double newTotal) {
-    if (_ledgerRef == null || _isLedgerClosed) return;
+    if (_ledgerRef == null || _isLedgerClosed || !_ledgerFromServer) return;
     if (_lastWrittenClosing == newTotal) return;
     _lastWrittenClosing = newTotal;
 
@@ -2299,8 +2322,11 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
                             ),
                           )
                         : _buildOpeningBalanceCard(opening),
+                    // Transactions only need the shop, not the ledger doc, so
+                    // start listening as soon as the shop is known — in
+                    // parallel with the ledger fetch instead of after it.
                     Expanded(
-                      child: _isLoading
+                      child: _selectedShopCollection == null
                           ? _buildProfessionalShimmer(isLandscape)
                           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: _getTransactionsStream(),

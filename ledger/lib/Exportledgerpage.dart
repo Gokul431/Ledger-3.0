@@ -51,19 +51,38 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
         await _loadShops();
       } else {
         setState(() {
-          _selectedShop = shopCollection;
+          // Never select a blank shop.
+          _selectedShop = shopCollection.isEmpty ? null : shopCollection;
           _isLoadingShops = false;
         });
+        if (shopCollection.isEmpty && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Shop not found. Please log in again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
         debugPrint('🔍 EMPLOYEE: Set selected shop to $shopCollection');
       }
     } catch (e) {
       debugPrint('❌ Error initializing user: $e');
+      // No hard-coded fallback shop — exporting another shop's data would be
+      // a data leak. Leave nothing selected and tell the user.
       setState(() {
         _userRole = 'employee';
-        _userShop = 'vks_retails';
-        _selectedShop = 'vks_retails';
+        _userShop = '';
+        _selectedShop = null;
         _isLoadingShops = false;
       });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Shop not found. Please log in again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -105,40 +124,21 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
     } catch (e) {
       debugPrint('❌ Error loading shops from shop_list: $e');
 
-      // ✅ Fallback: manually check for known shops by testing their existence
-      List<Map<String, dynamic>> fallbackShops = [];
-      List<String> knownShopCollections = [
-        'vks_retails',
-        'abc_retails',
-        'sgk_retails',
-      ];
-
-      for (String shopId in knownShopCollections) {
-        try {
-          final testDoc = await FirebaseFirestore.instance
-              .collection(shopId)
-              .limit(1)
-              .get();
-
-          if (testDoc.docs.isNotEmpty) {
-            fallbackShops.add({
-              'id': shopId,
-              'name': shopId.replaceAll('_', ' ').toUpperCase(),
-            });
-            debugPrint('🔍 Found existing shop collection: $shopId');
-          }
-        } catch (e) {
-          debugPrint('❌ Shop collection $shopId does not exist');
-        }
-      }
-
+      // No hard-coded list of shops to fall back on (those were old test
+      // shops) — show an error so the user can retry.
+      if (!mounted) return;
       setState(() {
-        _shops = fallbackShops;
+        _shops = [];
         _isLoadingShops = false;
-        if (fallbackShops.isNotEmpty && _selectedShop == null) {
-          _selectedShop = fallbackShops.first['id'];
-        }
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not load shops. Check your connection and try again.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -233,17 +233,6 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
         return;
       }
 
-      // ✅ Check if ledgers document exists
-      try {
-        final ledgersDoc = await FirebaseFirestore.instance
-            .collection(_selectedShop!)
-            .doc('ledgers')
-            .get();
-        debugPrint('🔍 Ledgers document exists: ${ledgersDoc.exists}');
-      } catch (e) {
-        debugPrint('❌ Error accessing ledgers document: $e');
-      }
-
       // ✅ Get all ledger dates from the selected shop collection
       final datesSnapshot = await FirebaseFirestore.instance
           .collection(_selectedShop!)
@@ -262,6 +251,9 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
       }
       debugPrint('🔍 Available ledger dates: $availableDates');
 
+      // Pick the dates in range first, then fetch all their transactions in
+      // parallel (previously one network round-trip per date, in sequence).
+      final includedDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
       for (var dateDoc in datesSnapshot.docs) {
         final ledgerDate = dateDoc.id;
 
@@ -297,40 +289,35 @@ class _ExportLedgerPageState extends State<ExportLedgerPage> {
                   ledgerDateOnly.isAfter(startDateOnly)) &&
               (ledgerDateOnly.isAtSameMomentAs(endDateOnly) ||
                   ledgerDateOnly.isBefore(endDateOnly))) {
-            debugPrint('✅ INCLUDING ledger date: $ledgerDate');
-
-            final ledgerData = dateDoc.data();
-            debugPrint('🔍 Ledger data fields: ${ledgerData.keys.toList()}');
-
-            // ✅ Get transactions for this specific ledger date
-            final transactionsSnapshot = await FirebaseFirestore.instance
-                .collection(_selectedShop!)
-                .doc('ledgers')
-                .collection('transactions')
-                .where('ledgerDate', isEqualTo: ledgerDate)
-                .get();
-
-            List<Map<String, dynamic>> transactions = [];
-            for (var transDoc in transactionsSnapshot.docs) {
-              transactions.add(transDoc.data());
-            }
-
-            debugPrint(
-              '🔍 Found ${transactions.length} transactions for $ledgerDate',
-            );
-
-            ledgersData.add({
-              'ledger': ledgerData,
-              'transactions': transactions,
-              'ledgerDate': ledgerDate,
-            });
-          } else {
-            debugPrint('❌ EXCLUDING ledger date: $ledgerDate - outside range');
+            includedDocs.add(dateDoc);
           }
         } catch (e) {
           debugPrint('❌ Error parsing date $ledgerDate: $e');
           continue;
         }
+      }
+
+      final transactionSnapshots = await Future.wait(
+        includedDocs.map(
+          (dateDoc) => FirebaseFirestore.instance
+              .collection(_selectedShop!)
+              .doc('ledgers')
+              .collection('transactions')
+              .where('ledgerDate', isEqualTo: dateDoc.id)
+              .get(),
+        ),
+      );
+
+      // Same order as before (the dates query order).
+      for (int i = 0; i < includedDocs.length; i++) {
+        ledgersData.add({
+          'ledger': includedDocs[i].data(),
+          'transactions': [
+            for (final transDoc in transactionSnapshots[i].docs)
+              transDoc.data(),
+          ],
+          'ledgerDate': includedDocs[i].id,
+        });
       }
 
       debugPrint('🔍 Final ledgers to export: ${ledgersData.length}');

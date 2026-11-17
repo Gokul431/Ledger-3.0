@@ -33,6 +33,11 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   String? _userRole;
   bool _isLoadingShops = true;
 
+  /// The shop this transaction belongs to. Never defaults to a hard-coded
+  /// shop — if it can't be determined, saving is blocked with an error so a
+  /// transaction can't land in the wrong shop.
+  String? _shopCollection;
+
   // Form data
   CustomerLedgerType _customerLedgerType = CustomerLedgerType.yes;
   LedgerPaymentType _ledgerPaymentType = LedgerPaymentType.paymentOut;
@@ -76,10 +81,24 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       final prefs = await SharedPreferences.getInstance();
       final loginType = prefs.getString('loginType') ?? 'client';
 
+      // Same resolution as Ledger Details: the shop passed in, else the
+      // logged-in user's saved shop. No hard-coded fallback.
+      String? shop = widget.shopCollection;
+      if (shop == null || shop.isEmpty) shop = prefs.getString('shopCollection');
+      if (shop != null && shop.isEmpty) shop = null;
+
+      if (!mounted) return;
       setState(() {
         _userRole = loginType;
+        _shopCollection = shop;
         _isLoadingShops = false;
       });
+
+      if (shop == null) {
+        setState(() => _loadingCustomers = false);
+        _showError(_noShopMessage);
+        return;
+      }
 
       await _loadCustomers();
     } catch (e) {
@@ -88,10 +107,13 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     }
   }
 
-  Future<void> _loadCustomers() async {
-    final shopCollection = widget.shopCollection ?? 'vks_retails';
+  static const String _noShopMessage =
+      'Shop not found. Please go back and open the ledger again, '
+      'or log in again.';
 
-    if (shopCollection.isEmpty) return;
+  Future<void> _loadCustomers() async {
+    final shopCollection = _shopCollection;
+    if (shopCollection == null) return;
 
     setState(() => _loadingCustomers = true);
     try {
@@ -137,40 +159,33 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
   }
 
   Future<void> _loadOutstandingAmount(String customerId) async {
-    final shopCollection = widget.shopCollection ?? 'vks_retails';
+    final shopCollection = _shopCollection;
+    if (shopCollection == null) return;
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final customerRef = FirebaseFirestore.instance
           .collection(shopCollection)
           .doc('customers')
           .collection('list')
-          .doc(customerId)
-          .collection('transactions')
-          .get();
+          .doc(customerId);
+      final txns = customerRef.collection('transactions');
 
-      double totalPaymentIn = 0;
-      double totalPaymentOut = 0;
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final amount = (data['amount'] ?? 0).toDouble();
-        final isCredit = data['isCredit'] ?? false;
-
-        // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE outstanding (subtract)
-        // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE outstanding (add)
-        if (isCredit) {
-          totalPaymentOut += amount;
-        } else {
-          totalPaymentIn += amount;
-        }
-      }
-
-      final customerDoc = await FirebaseFirestore.instance
-          .collection(shopCollection)
-          .doc('customers')
-          .collection('list')
-          .doc(customerId)
-          .get();
+      // Server-side sums + the customer doc, all in parallel (previously the
+      // whole transaction history was downloaded, then the doc fetched after).
+      final results = await Future.wait<Object>([
+        txns.aggregate(sum('amount')).get(),
+        txns.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
+        customerRef.get(),
+      ]);
+      final totalAll =
+          (results[0] as AggregateQuerySnapshot).getSum('amount') ?? 0;
+      // Payment OUT = CREDIT (isCredit = true) → INCREASE outstanding
+      final totalPaymentOut =
+          (results[1] as AggregateQuerySnapshot).getSum('amount') ?? 0;
+      // Payment IN = DEBIT (isCredit false/missing) → REDUCE outstanding
+      final totalPaymentIn = totalAll - totalPaymentOut;
+      final customerDoc =
+          results[2] as DocumentSnapshot<Map<String, dynamic>>;
 
       final openingAmount = (customerDoc.data()?['openingAmount'] ?? 0)
           .toDouble();
@@ -325,7 +340,6 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
     try {
       setState(() => _isUploadingImage = true);
 
-      final shopCollection = widget.shopCollection ?? 'vks_retails';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName =
           'bill_${timestamp}_${_selectedImage!.path.split('/').last}';
@@ -377,7 +391,11 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       return;
     }
 
-    final shopCollection = widget.shopCollection ?? 'vks_retails';
+    final shopCollection = _shopCollection;
+    if (shopCollection == null) {
+      _showError(_noShopMessage);
+      return;
+    }
 
     setState(() => _isLoading = true);
 

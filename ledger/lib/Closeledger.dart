@@ -67,11 +67,18 @@ class _CloseLedgerScreenState extends State<CloseLedgerScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final loginType = prefs.getString('loginType') ?? 'employee';
-      final shopCollection =
-          widget.shopCollection ??
-          prefs.getString('shopCollection') ??
-          'vks_retails';
+      // No hard-coded fallback shop: if it can't be determined,
+      // _loadLedgerData reports "Shop collection not available" instead of
+      // reading/closing another shop's ledger.
+      String? shopCollection = widget.shopCollection;
+      if (shopCollection == null || shopCollection.isEmpty) {
+        shopCollection = prefs.getString('shopCollection');
+      }
+      if (shopCollection != null && shopCollection.isEmpty) {
+        shopCollection = null;
+      }
 
+      if (!mounted) return;
       setState(() {
         _userRole = loginType;
         _isEmployeeLogin = loginType == 'employee';
