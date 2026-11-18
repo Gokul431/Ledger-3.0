@@ -365,7 +365,7 @@ class _ItemsPageState extends State<ItemsPage> {
                       Row(
                         children: [
                           Text(
-                            'Opening  ',
+                            'Started with  ',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey[400],
@@ -383,7 +383,7 @@ class _ItemsPageState extends State<ItemsPage> {
                                 style: TextStyle(
                                     color: Colors.grey[300], fontSize: 13)),
                             Text(
-                              'Added  ',
+                              'on  ',
                               style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey[400],

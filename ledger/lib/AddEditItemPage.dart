@@ -32,6 +32,42 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
 
   bool get isEdit => widget.existingDoc != null;
 
+  /// Start stock / start date are editable for a new item, and for an
+  /// existing item only after "Fix a mistake" is confirmed.
+  bool _unlockedStartFields = false;
+  bool get _startFieldsEditable => !isEdit || _unlockedStartFields;
+
+  bool _isToday(DateTime d) {
+    final n = DateTime.now();
+    return d.year == n.year && d.month == n.month && d.day == n.day;
+  }
+
+  Future<void> _unlockStartFields() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Fix start stock or date?'),
+        content: const Text(
+          'Only do this if the stock in hand or start date was entered wrongly '
+          'when this item was created.\n\n'
+          "Changing it will recalculate this item's stock from that date, "
+          'including days that are already closed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true && mounted) setState(() => _unlockedStartFields = true);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -516,59 +552,111 @@ class _AddEditItemPageState extends State<AddEditItemPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _priceController,
-                            label: 'Price per kg (₹)',
-                            hint: '0.00',
-                            icon: Icons.currency_rupee_rounded,
-                            isNumber: true,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _stockController,
-                            label: 'Opening Stock',
-                            hint: '0 kg',
-                            icon: Icons.scale_outlined,
-                            isNumber: true,
-                          ),
-                        ),
-                      ],
+                    _buildTextField(
+                      controller: _priceController,
+                      label: 'Price per kg (₹)',
+                      hint: '0.00',
+                      icon: Icons.currency_rupee_rounded,
+                      isNumber: true,
                     ),
                     const SizedBox(height: 20),
 
-                    _buildSectionLabel('Opening Stock Date'),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      onTap: _pickDate,
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                    if (_startFieldsEditable) ...[
+                      // New item (or an admin fixing a mistake): plain
+                      // wording so it is clear what to enter.
+                      _buildTextField(
+                        controller: _stockController,
+                        label: 'Stock in hand (kg)',
+                        hint: 'e.g. 100',
+                        icon: Icons.scale_outlined,
+                        isNumber: true,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'How many kg of this item you have on the start date below.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                      const SizedBox(height: 20),
+
+                      _buildSectionLabel('Start date'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'The item shows in the Stock page from this day onward. Usually keep it as today.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      ),
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: _pickDate,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8F9FA),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today_rounded, size: 20, color: Colors.grey.shade400),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  _isToday(_selectedDate)
+                                      ? 'Today (${DateFormat('dd MMM yyyy').format(_selectedDate)})'
+                                      : DateFormat('dd MMMM yyyy').format(_selectedDate),
+                                  style: const TextStyle(
+                                      fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87),
+                                ),
+                              ),
+                              Icon(Icons.edit_calendar_rounded, size: 20, color: Colors.grey.shade400),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      // Existing item: start stock/date are history, not
+                      // something to change day to day, so show read-only.
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF8F9FA),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(color: Colors.grey.shade200),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.calendar_today_rounded, size: 20, color: Colors.grey.shade400),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                DateFormat('dd MMMM yyyy').format(_selectedDate),
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w700, color: Colors.black87),
+                            Row(
+                              children: [
+                                Icon(Icons.lock_outline_rounded, size: 18, color: Colors.grey.shade500),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Started on ${DateFormat('dd MMM yyyy').format(_selectedDate)} '
+                                    'with ${_stockController.text} kg',
+                                    style: const TextStyle(
+                                        fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black87),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Daily stock is managed in the Stock page. No need to change this.',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: _unlockStartFields,
+                                child: const Text('Fix a mistake'),
                               ),
                             ),
-                            Icon(Icons.edit_calendar_rounded, size: 20, color: Colors.grey.shade400),
                           ],
                         ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: 20),
 
                     _buildSectionLabel('Bag Denominations (kg)'),
