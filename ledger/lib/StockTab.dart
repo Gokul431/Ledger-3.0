@@ -411,6 +411,45 @@ class _StockTabState extends State<StockTab>
       await batch.commit();
     }
 
+    // Server pass: an open day (today or later) must always use the item's
+    // CURRENT price from Manage Items. The day's record saves the price when
+    // it is first opened, so a price changed afterwards (from any phone or
+    // app version) would otherwise leave this day on the old price.
+    // Closed days and past days are never touched.
+    if (!fromCache && !stockClosed) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      if (!startOfDay.isBefore(today)) {
+        final priceBatch = FirebaseFirestore.instance.batch();
+        bool priceChanged = false;
+        bool salesChanged = false;
+        for (final item in items) {
+          final key = _itemStockKey(item);
+          final entry = entries[key];
+          if (entry == null) continue;
+          final itemData = item.data() as Map<String, dynamic>;
+          final masterPrice = (itemData['price'] ?? 0).toDouble();
+          final entryPrice = (entry['price'] ?? 0).toDouble();
+          if (masterPrice == entryPrice) continue;
+          final totalOut = (entry['totalOut'] ?? 0).toDouble();
+          final updates = {
+            'price': masterPrice,
+            'salesValue': totalOut * masterPrice,
+          };
+          priceBatch.update(_stockItemsCol().doc(key), updates);
+          entries[key] = {...entry, ...updates};
+          priceChanged = true;
+          if (totalOut > 0) salesChanged = true;
+        }
+        if (priceChanged) {
+          await priceBatch.commit();
+          if (salesChanged) {
+            await _resyncDayTotals(_ledgerDate, _stockItemsCol());
+          }
+        }
+      }
+    }
+
     if (!mounted) return false;
     // A local edit landed while we were loading — don't clobber it.
     if (guardVersion != null && guardVersion != _editVersion) return false;

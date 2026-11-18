@@ -531,8 +531,39 @@ class _StockOutPageState extends State<StockOutPage> {
 
   bool get _exceedsAvailable => _totalClosing > widget.available;
 
-  void _submit() {
-    if (_totalClosing <= 0 || _exceedsAvailable) return;
+  Future<void> _submit() async {
+    if (_exceedsAvailable) return;
+    // Closing 0 kg is valid (everything sold / no stock left), but confirm
+    // it so an empty form isn't saved by accident.
+    if (_totalClosing <= 0) {
+      final fmt = NumberFormat('#,##0.##');
+      final fmtMoney = NumberFormat('#,##,##0.00');
+      final sold = widget.available;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No stock left?'),
+          content: Text(
+            sold > 0
+                ? 'Closing stock will be saved as 0 kg.\n\n'
+                    'All ${fmt.format(sold)} kg will be counted as sold'
+                    '${widget.price != null ? ' (₹${fmtMoney.format(sold * widget.price!)})' : ''}.'
+                : 'Closing stock will be saved as 0 kg.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save 0 kg'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     final bagEntries = <Map<String, dynamic>>[];
     for (int i = 0; i < widget.bagSizes.length; i++) {
       final c = _count(i);
@@ -915,9 +946,7 @@ class _StockOutPageState extends State<StockOutPage> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: (totalClosing > 0 && !exceedsAvailable)
-                      ? _submit
-                      : null,
+                  onPressed: !exceedsAvailable ? _submit : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF455A64),
                     disabledBackgroundColor: Colors.grey[200],
@@ -929,13 +958,15 @@ class _StockOutPageState extends State<StockOutPage> {
                     elevation: 0,
                   ),
                   child: Text(
-                    widget.isViewMode
-                        ? (totalClosing > 0 && !exceedsAvailable
-                              ? 'Update ${fmt.format(totalClosing)} kg Closing'
-                              : 'Enter Bag Quantities')
-                        : (totalClosing > 0 && !exceedsAvailable
-                              ? 'Save ${fmt.format(totalClosing)} kg Closing'
-                              : 'Enter Bag Quantities'),
+                    exceedsAvailable
+                        ? 'More than available stock'
+                        : totalClosing <= 0
+                        ? (widget.isViewMode
+                              ? 'Update to 0 kg (No Stock Left)'
+                              : 'Save 0 kg Closing (No Stock Left)')
+                        : widget.isViewMode
+                        ? 'Update ${fmt.format(totalClosing)} kg Closing'
+                        : 'Save ${fmt.format(totalClosing)} kg Closing',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
