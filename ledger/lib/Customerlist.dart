@@ -1154,10 +1154,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
 
     // Positive amount (customer owes us) = RED
     // Negative amount (we owe customer) = GREEN
-    final bool isPositive = outstandingAmount >= 0;
-    Color amountColor = isPositive
-        ? const Color(0xFFF44336) // Red for positive (customer owes)
-        : const Color(0xFF4CAF50); // Green for negative (we owe)
+    final double roundedOutstanding =
+        (outstandingAmount * 100).roundToDouble() / 100;
+    final bool isAdvance = roundedOutstanding < 0;
+    final bool isSettled = roundedOutstanding == 0;
+    Color amountColor = isSettled
+        ? Colors.grey
+        : !isAdvance
+        ? const Color(0xFFF44336) // Red: customer owes
+        : const Color(0xFF4CAF50); // Green: customer paid extra (advance)
 
     return Column(
       children: [
@@ -1269,13 +1274,28 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 ),
                 Row(
                   children: [
-                    Text(
-                      _formatAmount(outstandingAmount.abs()),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: isLandscape ? 15.5 : 16.5,
-                        color: amountColor,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatAmount(outstandingAmount.abs()),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: isLandscape ? 15.5 : 16.5,
+                            color: amountColor,
+                          ),
+                        ),
+                        if (isAdvance || isSettled)
+                          Text(
+                            isAdvance ? 'Advance' : 'Settled',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: amountColor,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 8),
                     Icon(

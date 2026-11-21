@@ -84,7 +84,7 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
 
       rows.add({
         'date': createdAt != null ? _formatDate(createdAt) : 'N/A',
-        'type': isCredit ? 'Credit to customer' : 'Received',
+        'type': isCredit ? 'Given on credit' : 'Received from customer',
         'amount': amount,
         'start': start,
         'end': balance,
@@ -148,131 +148,125 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
           final totalOut = data['totalOut'] as double;
           final rows = (data['rows'] as List).cast<Map<String, dynamic>>();
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
+          return SingleChildScrollView(
+            // Extra bottom space so the last entry clears the iPhone home bar.
+            padding: EdgeInsets.fromLTRB(
+              16,
+              16,
+              16,
+              16 + MediaQuery.paddingOf(context).bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF455A64).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.account_balance_wallet_outlined,
-                        color: Color(0xFF455A64),
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Balance history',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey[900],
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Opening, received and credited amounts by transaction',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                // ── Simple calculation: opening + credit − received = now ──
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Opening balance',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            '₹${_formatAmount(opening)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'How the balance is calculated',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey[800],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total received from customer',
-                            style: TextStyle(
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            '₹${_formatAmount(totalIn)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 10),
+                      _calcRow(
+                        'Old pending amount (opening)',
+                        '₹${_formatAmount(opening)}',
+                        Colors.grey[900]!,
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total credit to customer',
-                            style: TextStyle(
-                              fontSize: 13,
-                            ),
-                          ),
-                          Text(
-                            '₹${_formatAmount(totalOut)}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
+                      _calcRow(
+                        '+ Given on credit',
+                        '₹${_formatAmount(totalOut)}',
+                        Colors.red[700]!,
                       ),
+                      _calcRow(
+                        '− Received from customer',
+                        '₹${_formatAmount(totalIn)}',
+                        Colors.green[700]!,
+                      ),
+                      const Divider(height: 18),
+                      _statusRow(current),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // ── Short help, collapsed by default ──
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Theme(
+                    data: theme.copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                      childrenPadding:
+                          const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      leading: Icon(
+                        Icons.help_outline,
+                        color: Colors.orange[800],
+                        size: 20,
+                      ),
+                      title: const Text(
+                        'How to read this',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      children: const [
+                        _HelpLine(
+                          icon: Icons.arrow_downward,
+                          color: Colors.green,
+                          text:
+                              'Received from customer: customer paid money. Balance goes DOWN.',
+                        ),
+                        _HelpLine(
+                          icon: Icons.arrow_upward,
+                          color: Colors.red,
+                          text:
+                              'Given on credit: customer took goods/money without paying. Balance goes UP.',
+                        ),
+                        _HelpLine(
+                          icon: Icons.circle,
+                          color: Colors.red,
+                          text: 'Red balance: customer still owes the shop.',
+                        ),
+                        _HelpLine(
+                          icon: Icons.circle,
+                          color: Colors.green,
+                          text:
+                              'Green "Advance": customer paid extra. Check for a payment entered twice.',
+                        ),
+                        _HelpLine(
+                          icon: Icons.circle,
+                          color: Colors.grey,
+                          text: 'Settled: nothing pending.',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Transaction-wise balance',
+                  'Entry by entry',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: Colors.grey[800],
                   ),
                 ),
                 const SizedBox(height: 8),
-                Expanded(
+                SizedBox(
                   child: rows.isEmpty
                       ? Center(
                           child: Column(
@@ -304,6 +298,8 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                           ),
                         )
                       : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
                           itemCount: rows.length,
                           separatorBuilder: (_, __) =>
                               const SizedBox(height: 8),
@@ -311,7 +307,7 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                             final r = rows[index];
                             final amount = r['amount'] as double;
                             final isCredit =
-                                (r['type'] as String).contains('Credit');
+                                (r['type'] as String) == 'Given on credit';
                             final Color txColor = isCredit
                                 ? Colors.red[700]!
                                 : Colors.green[700]!;
@@ -339,7 +335,11 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
+                                      // Expanded so a long label never
+                                      // pushes into the amount on small
+                                      // phones.
+                                      Expanded(
+                                        child: Row(
                                         children: [
                                           Container(
                                             width: 30,
@@ -359,12 +359,15 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                                             ),
                                           ),
                                           const SizedBox(width: 10),
-                                          Column(
+                                          Expanded(
+                                            child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 r['type'] as String,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
@@ -380,8 +383,11 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                                               ),
                                             ],
                                           ),
+                                          ),
                                         ],
+                                        ),
                                       ),
+                                      const SizedBox(width: 8),
                                       Text(
                                         '₹${_formatAmount(amount)}',
                                         style: TextStyle(
@@ -394,10 +400,19 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Balance: ${_formatAmount(r['start'] as double)} → ${_formatAmount(r['end'] as double)}',
+                                    'Balance before: ${_balanceText(r['start'] as double)}',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${isCredit ? '+' : '−'} ₹${_formatAmount(amount)}  →  Balance after: ${_balanceText(r['end'] as double)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[800],
                                     ),
                                   ),
                                 ],
@@ -414,7 +429,115 @@ class _BalanceDetailsScreenState extends State<BalanceDetailsScreen> {
     );
   }
 
-  // Chip helper no longer needed; header simplified to avoid overflow.
+  /// "₹26,160.00 (owes)", "₹2,340.00 advance" or "₹0.00 (settled)".
+  String _balanceText(double v) {
+    final r = (v * 100).roundToDouble() / 100;
+    if (r > 0) return '₹${_formatAmount(r)} (owes)';
+    if (r < 0) return '₹${_formatAmount(r.abs())} advance';
+    return '₹0.00 (settled)';
+  }
+
+  Widget _calcRow(String label, String value, Color valueColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(label, style: const TextStyle(fontSize: 13)),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusRow(double current) {
+    final r = (current * 100).roundToDouble() / 100;
+    final String label;
+    final String note;
+    final Color color;
+    if (r > 0) {
+      label = 'Balance now: customer owes';
+      note = 'Customer has to pay this amount.';
+      color = Colors.red[700]!;
+    } else if (r < 0) {
+      label = 'Balance now: Advance (extra paid)';
+      note = 'Customer paid more than owed. Check for a payment entered twice.';
+      color = Colors.green[700]!;
+    } else {
+      label = 'Balance now: Settled';
+      note = 'Nothing pending.';
+      color = Colors.grey[700]!;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ),
+            Text(
+              '₹${_formatAmount(r.abs())}',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(note, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
+    );
+  }
+}
+
+class _HelpLine extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  const _HelpLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 12.5)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 

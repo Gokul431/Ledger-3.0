@@ -12,6 +12,7 @@ import 'package:excel/excel.dart' as excel;
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'balance_details_screen.dart';
+import 'data/replay_latest.dart';
 
 class CustomerDetailScreen extends StatefulWidget {
   final String customerId;
@@ -75,14 +76,19 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       return _transactionsStream!;
     }
     _transactionsStreamKey = key;
-    _transactionsStream = FirebaseFirestore.instance
-        .collection(shop)
-        .doc('customers')
-        .collection('list')
-        .doc(widget.customerId)
-        .collection('transactions')
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    // replayLatest: the download button subscribes before the list does, and
+    // a plain broadcast stream would leave the list on its loading shimmer
+    // because it missed the first snapshot.
+    _transactionsStream = replayLatest(
+      FirebaseFirestore.instance
+          .collection(shop)
+          .doc('customers')
+          .collection('list')
+          .doc(widget.customerId)
+          .collection('transactions')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+    );
     return _transactionsStream!;
   }
 
@@ -1334,23 +1340,38 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     String mobile,
     BuildContext context,
   ) {
-    final bool isPositive = balance >= 0;
-    final Color primaryColor = isPositive
-        ? (Colors.red[700]!)
-        : Colors.green[700]!;
+    // > 0: customer owes the shop. < 0: customer paid extra (advance).
+    // Rounded to paise so tiny float leftovers count as settled.
+    final double rounded = (balance * 100).roundToDouble() / 100;
+    final bool owes = rounded > 0;
+    final bool advance = rounded < 0;
+    final Color primaryColor = owes
+        ? Colors.red[700]!
+        : advance
+        ? Colors.green[700]!
+        : Colors.grey[700]!;
+    final String label = owes
+        ? 'Outstanding Amount'
+        : advance
+        ? 'Advance (Extra paid)'
+        : 'Settled';
 
     return Container(
       width: double.infinity,
       margin: EdgeInsets.zero,
       padding: EdgeInsets.all(isLandscape ? 18 : 20),
       decoration: BoxDecoration(
-        color: isPositive ? Colors.red[50] : Colors.green[50],
+        color: owes
+            ? Colors.red[50]
+            : advance
+            ? Colors.green[50]
+            : Colors.grey[100],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Outstanding Amount',
+            label,
             style: TextStyle(
               fontSize: isLandscape ? 14 : 15,
               fontWeight: FontWeight.w600,

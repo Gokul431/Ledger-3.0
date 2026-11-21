@@ -18,6 +18,7 @@ import 'Createtransaction.dart';
 
 import 'edit_transaction_screen.dart'; // ✅ Import the new edit screen
 import 'StockTab.dart';
+import 'data/replay_latest.dart';
 
 import 'pdf_export_service.dart';
 import 'excel_export_service.dart';
@@ -277,12 +278,16 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
     }
     _transactionsStreamKey = key;
 
-    _transactionsStream = FirebaseFirestore.instance
-        .collection(_selectedShopCollection!)
-        .doc('ledgers')
-        .collection('transactions')
-        .where('ledgerDate', isEqualTo: ledgerDate)
-        .snapshots(); // ✅ Removed .orderBy to avoid index requirement
+    // replayLatest: the list and the download button share this stream; a
+    // late subscriber must still get the current data instead of waiting.
+    _transactionsStream = replayLatest(
+      FirebaseFirestore.instance
+          .collection(_selectedShopCollection!)
+          .doc('ledgers')
+          .collection('transactions')
+          .where('ledgerDate', isEqualTo: ledgerDate)
+          .snapshots(), // ✅ Removed .orderBy to avoid index requirement
+    );
     return _transactionsStream!;
   }
 
