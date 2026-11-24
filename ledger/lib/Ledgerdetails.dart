@@ -19,6 +19,7 @@ import 'Createtransaction.dart';
 import 'edit_transaction_screen.dart'; // ✅ Import the new edit screen
 import 'StockTab.dart';
 import 'data/replay_latest.dart';
+import 'data/customer_txn_link.dart';
 
 import 'pdf_export_service.dart';
 import 'excel_export_service.dart';
@@ -1108,9 +1109,32 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
 
       // Start batch for atomic updates
       WriteBatch batch = FirebaseFirestore.instance.batch();
+      bool customerCopyMissing = false;
 
       // Delete transaction
       batch.delete(doc.reference);
+
+      // Delete the customer's own copy too, so their balance stays right.
+      if (data['transactionType'] == 'Customer' &&
+          _selectedShopCollection != null) {
+        final linked = await findLinkedCustomerTxn(
+          shopCollection: _selectedShopCollection!,
+          ledgerDoc: doc,
+          ledgerData: data,
+        );
+        if (linked != null) {
+          batch.delete(linked);
+          final customerDoc =
+              customerDocFor(_selectedShopCollection!, data);
+          if (customerDoc != null) {
+            batch.update(customerDoc, {
+              'txnChangedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } else {
+          customerCopyMissing = true;
+        }
+      }
 
       // Update closing balance correctly
       await _updateClosingBalanceForDelete(batch, amount, isCredit);
@@ -1121,14 +1145,27 @@ class _LedgerDetailsScreenState extends State<LedgerDetailsScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.check_circle_outline, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Transaction deleted successfully'),
+                Icon(
+                  customerCopyMissing
+                      ? Icons.warning_amber_rounded
+                      : Icons.check_circle_outline,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    customerCopyMissing
+                        ? 'Deleted from ledger. The matching entry in the customer account was not found - please check that customer\'s balance.'
+                        : 'Transaction deleted successfully',
+                  ),
+                ),
               ],
             ),
-            backgroundColor: Colors.green[600],
+            backgroundColor: customerCopyMissing
+                ? Colors.orange[700]
+                : Colors.green[600],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),

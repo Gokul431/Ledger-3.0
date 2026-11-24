@@ -273,10 +273,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Future<double> _outstandingFor(
     String customerId,
     double openingAmount,
-    Timestamp? lastTransaction,
-  ) {
+    Timestamp? lastTransaction, [
+    Timestamp? txnChangedAt,
+  ]) {
+    // txnChangedAt is set when an entry is edited/deleted from the ledger,
+    // so the balance is recalculated even though no new entry was added.
     final key =
-        '$customerId|${lastTransaction?.microsecondsSinceEpoch ?? 0}|$openingAmount';
+        '$customerId|${lastTransaction?.microsecondsSinceEpoch ?? 0}|'
+        '${txnChangedAt?.microsecondsSinceEpoch ?? 0}|$openingAmount';
     final cached = _outstandingCache[key];
     if (cached != null) return cached;
 
@@ -351,36 +355,32 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
     String customerId,
     double openingAmount,
   ) async {
+    // Add up the entries exactly like the Customer details and Balance
+    // details pages do, so the list can never show a different figure.
+    // (Server-side sum queries were unreliable on the client's phones and
+    // left the list showing just the opening amount.) Works offline too.
     try {
-      final txns = FirebaseFirestore.instance
+      final snap = await FirebaseFirestore.instance
           .collection(_selectedShopCollection!)
           .doc('customers')
           .collection('list')
           .doc(customerId)
-          .collection('transactions');
-
-      // Server-side sums instead of downloading the customer's entire
-      // transaction history for every row (which got slower as history grew).
-      // "All" minus "OUT" = "IN", which also counts old docs that have no
-      // isCredit field as Payment IN — same as the previous `?? false`.
-      final results = await Future.wait([
-        txns.aggregate(sum('amount')).get(),
-        txns.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
-      ]);
-      final totalAll = results[0].getSum('amount') ?? 0;
-      // Payment OUT = CREDIT (isCredit = true) → money given to customer → INCREASE outstanding
-      final totalPaymentOut = results[1].getSum('amount') ?? 0;
-      // Payment IN = DEBIT (isCredit = false) → money received from customer → REDUCE outstanding
-      final totalPaymentIn = totalAll - totalPaymentOut;
-      // ✅ CORRECT FORMULA: Outstanding = Opening - Payment IN + Payment OUT
-      // Payment IN reduces what customer owes, Payment OUT increases what customer owes
-      final outstanding =
-          (openingAmount - totalPaymentIn + totalPaymentOut).toDouble();
-      _rememberOutstanding(customerId, outstanding);
-      return outstanding;
+          .collection('transactions')
+          .get();
+      double balance = openingAmount;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final amount = (data['amount'] ?? 0).toDouble();
+        if (data['isCredit'] == true) {
+          balance += amount; // Payment OUT / given on credit
+        } else {
+          balance -= amount; // Payment IN / received
+        }
+      }
+      _rememberOutstanding(customerId, balance);
+      return balance;
     } catch (e) {
       debugPrint('Error calculating outstanding: $e');
-      // Offline: show the last balance we knew rather than the opening amount.
       return _lastKnownOutstanding['$_selectedShopCollection|$customerId'] ??
           openingAmount;
     }
@@ -1186,7 +1186,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   shopCollection: _selectedShopCollection ?? '',
                 ),
               ),
-            );
+            ).then((_) {
+              // Recalculate this customer's balance on return, so the list
+              // always matches what the details page just showed.
+              if (!mounted) return;
+              _outstandingCache.removeWhere(
+                (k, _) => k.startsWith('$customerId|'),
+              );
+              setState(() {});
+            });
           },
           onLongPress: !_isEmployeeLogin
               ? () => _showCustomerOptions(context, customerId, name, isActive)
@@ -1513,6 +1521,9 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                                 customerId,
                                 openingAmount,
                                 lastTxn,
+                                data['txnChangedAt'] is Timestamp
+                                    ? data['txnChangedAt'] as Timestamp
+                                    : null,
                               ),
                               builder: (context, outstandingSnapshot) {
                                 final outstandingAmount =

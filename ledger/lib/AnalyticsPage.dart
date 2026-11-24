@@ -281,48 +281,37 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           .doc('ledgers')
           .collection('transactions');
 
-      // All-time totals come from server-side aggregations, and only this
-      // month/week's transactions are downloaded. Previously EVERY transaction
-      // ever recorded was downloaded on each visit, so this page got slower
-      // every day.
-      final windowStart = startOfWeek.isBefore(startOfMonth)
-          ? startOfWeek
-          : startOfMonth;
-      final results = await Future.wait<Object>([
-        col.aggregate(count(), sum('amount')).get(),
-        col.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
-        col.where('transactionType', isEqualTo: 'Customer').count().get(),
-        col
-            .where(
-              'createdAt',
-              isGreaterThan: Timestamp.fromDate(windowStart),
-            )
-            .get(),
-      ]);
-      final allAgg = results[0] as AggregateQuerySnapshot;
-      final creditAgg = results[1] as AggregateQuerySnapshot;
-      final customerAgg = results[2] as AggregateQuerySnapshot;
-      final recentSnapshot = results[3] as QuerySnapshot<Map<String, dynamic>>;
+      // All totals are added up from the entries directly. (Server-side
+      // sum/count queries were unreliable on the client's phones, which
+      // would leave this page empty.)
+      final allSnapshot = await col.get();
+      final recentSnapshot = allSnapshot;
 
-      final int totalTransactions = allAgg.count ?? 0;
-      // Docs without isCredit count as debit, same as `?? false` before.
-      double totalCredit = creditAgg.getSum('amount') ?? 0;
-      double totalDebit = (allAgg.getSum('amount') ?? 0) - totalCredit;
+      int totalTransactions = 0;
+      double totalCredit = 0;
+      double totalDebit = 0;
       double monthCredit = 0;
       double monthDebit = 0;
       double weekCredit = 0;
       double weekDebit = 0;
       int monthTransactions = 0;
       int weekTransactions = 0;
+      final Map<String, int> transactionTypes = {};
 
-      // Only "Customer" is ever written; anything else (or missing) is
-      // "General" — same buckets the old per-doc loop produced.
-      final customerCount = customerAgg.count ?? 0;
-      final Map<String, int> transactionTypes = {
-        if (customerCount > 0) 'Customer': customerCount,
-        if (totalTransactions - customerCount > 0)
-          'General': totalTransactions - customerCount,
-      };
+      for (var doc in allSnapshot.docs) {
+        final data = doc.data();
+        final amount = (data['amount'] ?? 0).toDouble();
+        totalTransactions++;
+        if (data['isCredit'] == true) {
+          totalCredit += amount;
+        } else {
+          totalDebit += amount;
+        }
+        // Only "Customer" is ever written; anything else is "General".
+        final type =
+            data['transactionType'] == 'Customer' ? 'Customer' : 'General';
+        transactionTypes[type] = (transactionTypes[type] ?? 0) + 1;
+      }
 
       for (var doc in recentSnapshot.docs) {
         final data = doc.data();

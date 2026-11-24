@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'data/customer_txn_link.dart';
 
 class EditTransactionScreen extends StatefulWidget {
   final DocumentSnapshot transactionDoc;
@@ -124,6 +125,33 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
 
       batch.update(widget.transactionDoc.reference, updateData);
 
+      // Keep the customer's own account in step with the ledger entry.
+      // Matched using the ORIGINAL values (before this edit).
+      bool customerCopyMissing = false;
+      if (widget.transactionData['transactionType'] == 'Customer') {
+        final linked = await findLinkedCustomerTxn(
+          shopCollection: widget.shopCollection,
+          ledgerDoc: widget.transactionDoc,
+          ledgerData: widget.transactionData,
+        );
+        if (linked != null) {
+          batch.update(linked, {
+            'amount': newAmount,
+            'isCredit': _isCredit,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          final customerDoc =
+              customerDocFor(widget.shopCollection, widget.transactionData);
+          if (customerDoc != null) {
+            batch.update(customerDoc, {
+              'txnChangedAt': FieldValue.serverTimestamp(),
+            });
+          }
+        } else {
+          customerCopyMissing = true;
+        }
+      }
+
       // ✅ STEP 2: Calculate and update closing balance correctly
       await _updateClosingBalance(batch, newAmount, _isCredit);
 
@@ -131,7 +159,12 @@ class _EditTransactionScreenState extends State<EditTransactionScreen> {
       await batch.commit();
 
       if (mounted) {
-        _showSnackBar('Transaction updated successfully');
+        _showSnackBar(
+          customerCopyMissing
+              ? 'Updated in ledger. The matching entry in the customer account was not found - please check that customer\'s balance.'
+              : 'Transaction updated successfully',
+          isError: customerCopyMissing,
+        );
         Navigator.pop(context, true); // Return true to indicate success
       }
     } catch (e) {

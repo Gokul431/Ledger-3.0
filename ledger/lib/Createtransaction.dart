@@ -172,20 +172,26 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
 
       // Server-side sums + the customer doc, all in parallel (previously the
       // whole transaction history was downloaded, then the doc fetched after).
+      // Entries are added up directly (same as the Customer details page);
+      // server-side sum queries were unreliable on the client's phones.
       final results = await Future.wait<Object>([
-        txns.aggregate(sum('amount')).get(),
-        txns.where('isCredit', isEqualTo: true).aggregate(sum('amount')).get(),
+        txns.get(),
         customerRef.get(),
       ]);
-      final totalAll =
-          (results[0] as AggregateQuerySnapshot).getSum('amount') ?? 0;
-      // Payment OUT = CREDIT (isCredit = true) → INCREASE outstanding
-      final totalPaymentOut =
-          (results[1] as AggregateQuerySnapshot).getSum('amount') ?? 0;
-      // Payment IN = DEBIT (isCredit false/missing) → REDUCE outstanding
-      final totalPaymentIn = totalAll - totalPaymentOut;
+      double totalPaymentIn = 0;
+      double totalPaymentOut = 0;
+      for (final doc
+          in (results[0] as QuerySnapshot<Map<String, dynamic>>).docs) {
+        final d = doc.data();
+        final amt = (d['amount'] ?? 0).toDouble();
+        if (d['isCredit'] == true) {
+          totalPaymentOut += amt; // Payment OUT → INCREASE outstanding
+        } else {
+          totalPaymentIn += amt; // Payment IN → REDUCE outstanding
+        }
+      }
       final customerDoc =
-          results[2] as DocumentSnapshot<Map<String, dynamic>>;
+          results[1] as DocumentSnapshot<Map<String, dynamic>>;
 
       final openingAmount = (customerDoc.data()?['openingAmount'] ?? 0)
           .toDouble();
@@ -440,6 +446,13 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
       // three sequential ones, and they succeed or fail together.
       final db = FirebaseFirestore.instance;
       final batch = db.batch();
+      // The ledger entry and the customer's copy share ONE id, so later
+      // edits/deletes from Ledger Details can always find the customer copy.
+      final ledgerTxnRef = db
+          .collection(shopCollection)
+          .doc('ledgers')
+          .collection('transactions')
+          .doc();
 
       // Save customer transaction if it's a customer transaction
       if (_customerLedgerType == CustomerLedgerType.yes) {
@@ -448,7 +461,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
             .doc('customers')
             .collection('list')
             .doc(_selectedCustomerId!);
-        batch.set(customerRef.collection('transactions').doc(), {
+        batch.set(customerRef.collection('transactions').doc(ledgerTxnRef.id), {
           'amount': amount,
           'description': description,
           // Payment IN = DEBIT (isCredit = false)
@@ -465,7 +478,7 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
 
       // Save to shop's ledger collection
       batch.set(
-        db.collection(shopCollection).doc('ledgers').collection('transactions').doc(),
+        ledgerTxnRef,
         {
           'amount': amount,
           'description': description,
@@ -483,6 +496,8 @@ class _CreateTransactionScreenState extends State<CreateTransactionScreen> {
             'customerName': _selectedCustomerName!,
           if (_customerLedgerType == CustomerLedgerType.yes)
             'customerId': _selectedCustomerId!,
+          if (_customerLedgerType == CustomerLedgerType.yes)
+            'customerTxnId': ledgerTxnRef.id,
           if (billPhotoUrl != null) 'billPhotoUrl': billPhotoUrl,
         },
       );

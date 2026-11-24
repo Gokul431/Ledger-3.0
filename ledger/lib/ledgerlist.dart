@@ -1305,41 +1305,25 @@ class _LedgerListScreenState extends State<LedgerListScreen> {
       final isLedgerClosed =
           (ledger['status'] ?? 'Open').toString().toLowerCase() == 'closed';
 
-      // Sum the day's transactions on the server (two tiny aggregate
-      // replies) instead of downloading every transaction document for
-      // every row in the list.
+      // Add up the day's entries directly (server-side sum queries were
+      // unreliable on the client's phones). One day is a small list.
       double totalDebit = openingBalance;
       double totalCredit = 0.0;
 
-      final txns = _firestore
+      final transactionsSnapshot = await _firestore
           .collection(_selectedShopCollection!)
           .doc('ledgers')
           .collection('transactions')
-          .where('ledgerDate', isEqualTo: ledgerDate);
-      try {
-        final sums = await Future.wait([
-          txns.aggregate(sum('amount')).get(),
-          txns
-              .where('isCredit', isEqualTo: true)
-              .aggregate(sum('amount'))
-              .get(),
-        ]);
-        final all = (sums[0].getSum('amount') ?? 0).toDouble();
-        final credit = (sums[1].getSum('amount') ?? 0).toDouble();
+          .where('ledgerDate', isEqualTo: ledgerDate)
+          .get();
+      for (var doc in transactionsSnapshot.docs) {
+        final data = doc.data();
+        final amount = (data['amount'] ?? 0).toDouble();
         // Payment IN = DEBIT (isCredit = false), Payment OUT = CREDIT
-        totalDebit += all - credit;
-        totalCredit += credit;
-      } catch (_) {
-        // Offline (aggregates need the server): fall back to the documents.
-        final transactionsSnapshot = await txns.get();
-        for (var doc in transactionsSnapshot.docs) {
-          final data = doc.data();
-          final amount = (data['amount'] ?? 0).toDouble();
-          if (data['isCredit'] == true) {
-            totalCredit += amount;
-          } else {
-            totalDebit += amount;
-          }
+        if (data['isCredit'] == true) {
+          totalCredit += amount;
+        } else {
+          totalDebit += amount;
         }
       }
 
